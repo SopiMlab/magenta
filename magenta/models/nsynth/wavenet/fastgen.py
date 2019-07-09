@@ -199,7 +199,9 @@ def generate_audio_sample(sess, net, audio, encoding):
 def synthesize(encodings,
                save_paths,
                checkpoint_path="model.ckpt-200000",
-               samples_per_save=10000):
+               samples_per_save=10000,
+               batch_i=None,
+               total_batches=None):
   """Synthesize audio from an array of encodings.
 
   Args:
@@ -233,8 +235,21 @@ def synthesize(encodings,
       audio = generate_audio_sample(sess, net,
                                     audio, encodings[:, encoding_i, :])
       audio_batch[:, sample_i] = audio[:, 0]
+
       if sample_i % 100 == 0:
-        tf.logging.info("Sample: %d" % sample_i)
+        the_batch_i = batch_i if batch_i != None else 0
+        the_total_batches = total_batches if total_batches != None else 1
+        progress = (the_batch_i + float(sample_i+1)/total_length)/the_total_batches
+        
+        log_str = "{:.1f}% - ".format(progress*100)
+        if batch_i != None or total_batches != None:
+          log_str += "Batch: {}/{} - ".format(
+            (batch_i+1) if batch_i != None else "?",
+            total_batches if total_batches != None else "?"
+          )
+        log_str += "Sample: {}/{}".format(sample_i+1, total_length)
+        tf.logging.info(log_str)
+      
       if sample_i % samples_per_save == 0 and save_paths:
         save_batch(audio_batch, save_paths)
 

@@ -38,7 +38,8 @@ tf.app.flags.DEFINE_string("log", "INFO",
                            "DEBUG, INFO, WARN, ERROR, or FATAL.")
 tf.app.flags.DEFINE_integer("gpu_number", 0,
                             "Number of the gpu to use for multigpu generation.")
-
+tf.app.flags.DEFINE_integer("samples_per_save", 10000,
+                            "Number of samples to generate between saves.")
 
 def main(unused_argv=None):
   os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_number)
@@ -77,7 +78,9 @@ def main(unused_argv=None):
   batch_size = FLAGS.batch_size
   sample_length = FLAGS.sample_length
   n = len(files)
-  for start in range(0, n, batch_size):
+  batch_starts = range(0, n, batch_size)
+  total_batches = len(batch_starts)
+  for batch_i, start in enumerate(batch_starts):
     end = start + batch_size
     batch_files = files[start:end]
     save_names = [
@@ -99,12 +102,21 @@ def main(unused_argv=None):
     if FLAGS.gpu_number != 0:
       with tf.device("/device:GPU:%d" % FLAGS.gpu_number):
         fastgen.synthesize(
-            encodings, save_names, checkpoint_path=checkpoint_path)
+          encodings, save_names,
+          checkpoint_path=checkpoint_path,
+          samples_per_save=FLAGS.samples_per_save,
+          batch_i=batch_i,
+          total_batches=total_batches
+        )
     # Single gpu
     else:
       fastgen.synthesize(
-          encodings, save_names, checkpoint_path=checkpoint_path)
-
+        encodings, save_names,
+        checkpoint_path=checkpoint_path,
+        samples_per_save=FLAGS.samples_per_save,
+        batch_i=batch_i,
+        total_batches=total_batches
+      )
 
 def console_entry_point():
   tf.app.run(main)
