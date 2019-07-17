@@ -1,3 +1,8 @@
+# Magenta, SOPI edition
+
+This fork contains some modifications for SOPI use.
+
+---
 
 <img src="magenta-logo-bg.png" height="75">
 
