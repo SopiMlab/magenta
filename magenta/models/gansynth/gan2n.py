@@ -156,7 +156,6 @@ def main(unused_argv):
   print("len(pitches_rep) =", len(pitches_rep))
   
   print("generating {} samples,,".format(len(z_notes_rep)))
-  #import pdb; pdb.set_trace()
   audio_notes = model.generate_samples_from_z(z_notes_rep, pitches_rep)
   
   audio_metas = []
@@ -174,8 +173,6 @@ def main(unused_argv):
     fn = os.path.join(output_dir, "gen_{}.wav".format(name))
     gu.save_wav(wave, fn)
     
-  return
-
 def console_entry_point():
   tf.app.run(main)
 
