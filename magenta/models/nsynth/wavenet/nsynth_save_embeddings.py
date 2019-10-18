@@ -109,7 +109,7 @@ def main(unused_argv=None):
       tf.logging.info("Sample length: %d" % sample_length)
 
       for num, (wavfile, enc) in enumerate(zip(wavefiles_batch, encoding)):
-        filename = os.path.splitext("%s_embeddings.npy" % wavfile.split("/")[-1])[0]
+        filename = "%s_embeddings.npy" % os.path.splitext(wavfile.split("/")[-1])[0]
         with tf.gfile.Open(os.path.join(save_path, filename), "w") as f:
           np.save(f, enc)
 
