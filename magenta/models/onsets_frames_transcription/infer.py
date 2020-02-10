@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ import time
 from magenta.models.onsets_frames_transcription import infer_util
 from magenta.models.onsets_frames_transcription import train_util
 from magenta.music import midi_io
-from magenta.protobuf import music_pb2
+from magenta.music.protobuf import music_pb2
 
 import numpy as np
 import scipy
@@ -153,10 +153,10 @@ def model_inference(model_fn,
 
     # Update histogram for metrics.
     with tf.Graph().as_default(), tf.Session().as_default():
-      for k, v in predictions.iteritems():
+      for k, v in predictions.items():
         if not k.startswith('metrics/'):
           continue
-        all_metrics[k].append(v)
+        all_metrics[k].extend(v)
         metric_summary = tf.summary.histogram(
             k,
             tf.constant(all_metrics[k], name=k),
@@ -168,7 +168,7 @@ def model_inference(model_fn,
 
   # Write final mean values for all metrics.
   with tf.Graph().as_default(), tf.Session().as_default():
-    for k, v in all_metrics.iteritems():
+    for k, v in all_metrics.items():
       name = 'final/' + k
       metric_summary = tf.summary.scalar(
           name,

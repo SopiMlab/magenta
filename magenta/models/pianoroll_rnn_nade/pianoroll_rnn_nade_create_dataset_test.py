@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,10 @@
 import magenta
 from magenta.models.shared import events_rnn_model
 import magenta.music as mm
+from magenta.music.protobuf import music_pb2
 from magenta.pipelines import pianoroll_pipeline
-from magenta.protobuf import music_pb2
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+from tensorflow.contrib import training as contrib_training
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -29,9 +30,7 @@ class PianorollPipelineTest(tf.test.TestCase):
   def setUp(self):
     super(PianorollPipelineTest, self).setUp()
     self.config = events_rnn_model.EventSequenceRnnConfig(
-        None,
-        mm.PianorollEncoderDecoder(88),
-        tf.contrib.training.HParams())
+        None, mm.PianorollEncoderDecoder(88), contrib_training.HParams())
 
   def testPianorollPipeline(self):
     note_sequence = magenta.common.testing_lib.parse_test_proto(

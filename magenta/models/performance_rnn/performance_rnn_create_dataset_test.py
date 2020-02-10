@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
 
 import magenta
 from magenta.models.performance_rnn import performance_model
+from magenta.music.protobuf import music_pb2
 from magenta.pipelines import performance_pipeline
-from magenta.protobuf import music_pb2
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+from tensorflow.contrib import training as contrib_training
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -31,7 +32,7 @@ class PerformancePipelineTest(tf.test.TestCase):
         None,
         magenta.music.OneHotEventSequenceEncoderDecoder(
             magenta.music.PerformanceOneHotEncoding()),
-        tf.contrib.training.HParams())
+        contrib_training.HParams())
 
   def testPerformanceRnnPipeline(self):
     note_sequence = music_pb2.NoteSequence()

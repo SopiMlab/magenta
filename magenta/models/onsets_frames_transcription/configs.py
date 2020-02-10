@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,13 +23,13 @@ import collections
 from magenta.common import tf_utils
 from magenta.models.onsets_frames_transcription import audio_transform
 from magenta.models.onsets_frames_transcription import model
-import tensorflow as tf_head
+from tensorflow.contrib import training as contrib_training
 
 Config = collections.namedtuple('Config', ('model_fn', 'hparams'))
 
 DEFAULT_HPARAMS = tf_utils.merge_hparams(
     audio_transform.DEFAULT_AUDIO_TRANSFORM_HPARAMS,
-    tf_head.contrib.training.HParams(
+    contrib_training.HParams(
         eval_batch_size=1,
         predict_batch_size=1,
         shuffle_buffer_size=64,

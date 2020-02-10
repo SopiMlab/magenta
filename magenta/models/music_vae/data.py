@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,12 +28,13 @@ import magenta.music as mm
 from magenta.music import chords_lib
 from magenta.music import drums_encoder_decoder
 from magenta.music import sequences_lib
+from magenta.music.protobuf import music_pb2
 from magenta.pipelines import drum_pipelines
 from magenta.pipelines import melody_pipelines
-from magenta.protobuf import music_pb2
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
+from tensorflow.contrib import data as contrib_data
 
 PIANO_MIN_MIDI_PITCH = 21
 PIANO_MAX_MIDI_PITCH = 108
@@ -358,6 +359,8 @@ class BaseConverter(object):
     else:
       return self._to_items(samples, controls)
 
+  # TODO(b/144556490): Remove `do_not_convert` when fixed.
+  @tf.autograph.experimental.do_not_convert
   def tf_to_tensors(self, item_scalar):
     """TensorFlow op that converts item into output tensors.
 
@@ -1225,10 +1228,8 @@ def get_dataset(
           'No files were found matching examples path: %s' %  examples_path)
     files = tf.data.Dataset.list_files(examples_path)
     dataset = files.apply(
-        tf.contrib.data.parallel_interleave(
-            tf_file_reader,
-            cycle_length=num_threads,
-            sloppy=is_training))
+        contrib_data.parallel_interleave(
+            tf_file_reader, cycle_length=num_threads, sloppy=is_training))
   elif config.tfds_name:
     tf.logging.info('Reading examples from TFDS: %s', config.tfds_name)
     dataset = tfds.load(

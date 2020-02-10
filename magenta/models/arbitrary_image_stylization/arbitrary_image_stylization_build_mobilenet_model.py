@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,8 @@ from __future__ import print_function
 from magenta.models.arbitrary_image_stylization import arbitrary_image_stylization_losses as losses
 from magenta.models.arbitrary_image_stylization import nza_model as transformer_model
 from magenta.models.image_stylization import ops
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+from tensorflow.contrib import slim as contrib_slim
 
 try:
   from nets.mobilenet import mobilenet_v2, mobilenet  # pylint:disable=g-import-not-at-top,g-multiple-import
@@ -31,7 +32,7 @@ except ImportError:
         'in https://github.com/tensorflow/models/tree/master/research/slim')
   raise
 
-slim = tf.contrib.slim
+slim = contrib_slim
 
 
 def build_mobilenet_model(content_input_,

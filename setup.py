@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@
 
 """A setuptools based setup module for magenta."""
 
-import sys
-
 from setuptools import find_packages
 from setuptools import setup
 
@@ -26,16 +24,11 @@ from setuptools import setup
 with open('magenta/version.py') as in_file:
   exec(in_file.read())  # pylint: disable=exec-used
 
-if '--gpu' in sys.argv:
-  gpu_mode = True
-  sys.argv.remove('--gpu')
-else:
-  gpu_mode = False
-
 REQUIRED_PACKAGES = [
     'IPython',
-    'absl-py',
     'Pillow >= 3.4.2',
+    'absl-py',
+    'attrs',
     'backports.tempfile',
     'bokeh >= 0.12.0',
     # Temporary fix for gast issue with TF.
@@ -55,24 +48,28 @@ REQUIRED_PACKAGES = [
     'protobuf >= 3.6.1',
     'pygtrie >= 2.3',
     'python-rtmidi >= 1.1, < 1.2',  # 1.2 breaks us
+    'scikit-image',
     'scipy >= 0.18.1',
     'six >= 1.12.0',
     'sk-video',
     'dm-sonnet < 2.0.0',  # Sonnet 2 requires TF2.
     'sox >= 1.3.7',
+    'tensorflow >= 1.15.0, < 2.0.0',  # Magenta is not yet TF2 compatible.
     'tensorflow-datasets >= 1.0.2',
     'tensorflow-probability == 0.7.0',
     'tensor2tensor >= 1.13.4',
     'wheel',
     'futures;python_version=="2.7"',
-    'apache-beam[gcp] >= 2.14.0',
+    'apache-beam[gcp] >= 2.14.0, < 2.19.0',  # Temporary fix for 'typing' issue
 ]
 
-# Magenta library is not yet TF2 compatible.
-if gpu_mode:
-  REQUIRED_PACKAGES.append('tensorflow-gpu >= 1.14.0, < 2.0.0')
-else:
-  REQUIRED_PACKAGES.append('tensorflow >= 1.14.0, < 2.0.0')
+EXTRAS_REQUIRE = {
+    'onsets_frames_realtime': [
+        'pyaudio',
+        'colorama',
+        'tflite',
+    ],
+}
 
 # pylint:disable=line-too-long
 CONSOLE_SCRIPTS = [
@@ -107,6 +104,7 @@ CONSOLE_SCRIPTS = [
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_infer',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_train',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_transcribe',
+    'magenta.models.onsets_frames_transcription.realtime.onsets_frames_transcription_realtime',
     'magenta.models.performance_rnn.performance_rnn_create_dataset',
     'magenta.models.performance_rnn.performance_rnn_generate',
     'magenta.models.performance_rnn.performance_rnn_train',
@@ -126,7 +124,7 @@ CONSOLE_SCRIPTS = [
 # pylint:enable=line-too-long
 
 setup(
-    name='magenta-gpu' if gpu_mode else 'magenta',
+    name='magenta',
     version=__version__,  # pylint: disable=undefined-variable
     description='Use machine learning to create art and music',
     long_description='',
@@ -151,6 +149,7 @@ setup(
 
     packages=find_packages(),
     install_requires=REQUIRED_PACKAGES,
+    extras_require=EXTRAS_REQUIRE,
     entry_points={
         'console_scripts': ['%s = %s:console_entry_point' % (n, p) for n, p in
                             ((s.split('.')[-1], s) for s in CONSOLE_SCRIPTS)],

@@ -1,4 +1,4 @@
-# Copyright 2019 The Magenta Authors.
+# Copyright 2020 The Magenta Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,8 @@ set -e
 set -x
 
 sudo apt-get update
-sudo apt-get -y install build-essential libasound2-dev libjack-dev libav-tools sox
+sudo apt-get -y install build-essential libasound2-dev libjack-dev libav-tools \
+  sox
 
 # Ensure python 3.7 used, set up an isolated virtualenv.
 PY3_PATH="$(which python3.7)"
@@ -32,6 +33,9 @@ ${PY3_PATH} -m virtualenv /tmp/magenta-env --python="${PY3_PATH}"
 source /tmp/magenta-env/bin/activate
 echo $(which python)
 python --version
+
+pip install --upgrade pip setuptools
+pip install six==1.12.0  # temporary fix for astroid compatibility.
 
 python setup.py bdist_wheel --universal
 pip install --upgrade --ignore-installed dist/magenta*.whl
