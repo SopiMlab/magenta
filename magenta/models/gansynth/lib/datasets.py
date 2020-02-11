@@ -61,14 +61,69 @@ class BaseDataset(object):
 class NSynthTFRecordDataset(BaseDataset):
   """A dataset for reading NSynth from a TFRecord file."""
 
-  def _get_dataset_from_path(self):
+  def __init__(self, config):
+      super().__init__(config)
+      self._length = 64000
+      self._channels = 1
+      self._dataset = None
+      self._pitch_counts = None
+      
+  def _get_dataset_from_path(self, shuffle_and_repeat=True):
     dataset = tf.data.Dataset.list_files(self._train_data_path)
-    dataset = dataset.apply(contrib_data.shuffle_and_repeat(buffer_size=1000))
+    if shuffle_and_repeat:
+        dataset = dataset.apply(contrib_data.shuffle_and_repeat(buffer_size=1000))
     dataset = dataset.apply(
         contrib_data.parallel_interleave(
             tf.data.TFRecordDataset, cycle_length=20, sloppy=True))
     return dataset
 
+  def _parse_dataset(self, dataset):
+    def _parse_nsynth(record):
+      """Parsing function for NSynth dataset."""
+      features = {
+          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
+          'audio': tf.FixedLenFeature([self._length], dtype=tf.float32),
+          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
+          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
+          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
+      }
+
+      example = tf.parse_single_example(record, features)
+      wave, label = example['audio'], example['pitch']
+      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
+                                      self._length,
+                                      self._channels)[0]
+      return wave, label, example['instrument_source']
+    return dataset.map(_parse_nsynth, num_parallel_calls=4)
+  
+  def _count_pitches(self):
+    dataset = self._get_dataset_from_path(shuffle_and_repeat=False)
+    dataset = self._parse_dataset(dataset)
+    dataset = dataset.map(lambda w, p, s: p[0])
+    
+    sess = tf.Session()
+    iterator = dataset.make_initializable_iterator()
+    sess.run(iterator.initializer)
+    sess.run(tf.tables_initializer())
+    next_element = iterator.get_next()
+    
+    counts_list = [0]*128
+    
+    try:
+      i = 0
+      while True:
+        if i % 1000 == 0:
+            print(i)
+        pitch = sess.run(next_element)
+        counts_list[pitch] += 1
+        i += 1
+    except tf.errors.OutOfRangeError:
+        pass
+
+    counts = dict(enumerate(counts_list))
+        
+    self._pitch_counts = counts
+  
   def provide_one_hot_labels(self, batch_size):
     """Provides one hot labels."""
     pitch_counts = self.get_pitch_counts()
@@ -79,112 +134,41 @@ class NSynthTFRecordDataset(BaseDataset):
     one_hot_labels = tf.one_hot(indices, depth=len(pitches))
     return one_hot_labels
 
-  def provide_dataset(self):
+  def provide_dataset(self, instrument_sources=None, min_pitch=24, max_pitch=84):
     """Provides dataset (audio, labels) of nsynth."""
-    length = 64000
-    channels = 1
 
     pitch_counts = self.get_pitch_counts()
     pitches = sorted(pitch_counts.keys())
     label_index_table = contrib_lookup.index_table_from_tensor(
         sorted(pitches), dtype=tf.int64)
 
-    def _parse_nsynth(record):
-      """Parsing function for NSynth dataset."""
-      features = {
-          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
-          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
-          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
-          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
-          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
-      }
-
-      example = tf.parse_single_example(record, features)
-      wave, label = example['audio'], example['pitch']
-      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
-                                      length,
-                                      channels)[0]
+    def _add_one_hot_label(data):
+      wave, label, instrument_source = data
       one_hot_label = tf.one_hot(
           label_index_table.lookup(label), depth=len(pitches))[0]
-      return wave, one_hot_label, label, example['instrument_source']
-
+      return wave, one_hot_label, label, instrument_source
+    
     dataset = self._get_dataset_from_path()
-    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
+    dataset = self._parse_dataset(dataset)
+    dataset = dataset.map(_add_one_hot_label)
 
-    # Filter just acoustic instruments (as in the paper)
+    # Filter just specified instrument sources
     # (0=acoustic, 1=electronic, 2=synthetic)
-    dataset = dataset.filter(lambda w, l, p, s: tf.equal(s, 0)[0])
-    # Filter just pitches 24-84
-    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, 24)[0])
-    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, 84)[0])
+    if instrument_sources != None:
+        def _is_wanted_source(s):
+            return any(map(lambda q: tf.equal(s, q)[0], instrument_sources))
+        dataset = dataset.filter(lambda w, l, p, s: _is_wanted_source(s))
+    # Filter just specified pitches
+    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, min_pitch)[0])
+    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, max_pitch)[0])
     dataset = dataset.map(lambda w, l, p, s: (w, l))
     return dataset
 
   def get_pitch_counts(self):
-    pitch_counts = {
-        24: 711,
-        25: 720,
-        26: 715,
-        27: 725,
-        28: 726,
-        29: 723,
-        30: 738,
-        31: 829,
-        32: 839,
-        33: 840,
-        34: 860,
-        35: 870,
-        36: 999,
-        37: 1007,
-        38: 1063,
-        39: 1070,
-        40: 1084,
-        41: 1121,
-        42: 1134,
-        43: 1129,
-        44: 1155,
-        45: 1149,
-        46: 1169,
-        47: 1154,
-        48: 1432,
-        49: 1406,
-        50: 1454,
-        51: 1432,
-        52: 1593,
-        53: 1613,
-        54: 1578,
-        55: 1784,
-        56: 1738,
-        57: 1756,
-        58: 1718,
-        59: 1738,
-        60: 1789,
-        61: 1746,
-        62: 1765,
-        63: 1748,
-        64: 1764,
-        65: 1744,
-        66: 1677,
-        67: 1746,
-        68: 1682,
-        69: 1705,
-        70: 1694,
-        71: 1667,
-        72: 1695,
-        73: 1580,
-        74: 1608,
-        75: 1546,
-        76: 1576,
-        77: 1485,
-        78: 1408,
-        79: 1438,
-        80: 1333,
-        81: 1369,
-        82: 1331,
-        83: 1295,
-        84: 1291
-    }
-    return pitch_counts
+    if self._pitch_counts == None:
+      self._count_pitches()
+
+    return self._pitch_counts        
 
 
 registry = {
