@@ -41,6 +41,10 @@ def set_flags(flags):
   # Must be specified externally
   flags.set_if_empty('train_root_dir', '/tmp/gansynth/train')
   flags.set_if_empty('train_data_path', '/tmp/gansynth/nsynth-train.tfrecord')
+  flags.set_if_empty('train_meta_path', '')
+  flags.set_if_empty('train_instrument_sources', [0])
+  flags.set_if_empty('train_min_pitch', 24)
+  flags.set_if_empty('train_max_pitch', 84)
 
   ### Dataset ###
   flags.set_if_empty('dataset_name', 'nsynth_tfrecord')

@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import json
 from magenta.models.gansynth.lib import spectral_ops
 from magenta.models.gansynth.lib import util
 import numpy as np
@@ -61,6 +62,13 @@ class BaseDataset(object):
 class NSynthTFRecordDataset(BaseDataset):
   """A dataset for reading NSynth from a TFRecord file."""
 
+  def __init__(self, config):
+      super().__init__(config)
+      self._train_meta_path = util.expand_path(config['train_meta_path'])
+      self._instrument_sources = config['train_instrument_sources']
+      self._min_pitch = config['train_min_pitch']
+      self._max_pitch = config['train_max_pitch']
+    
   def _get_dataset_from_path(self):
     dataset = tf.data.Dataset.list_files(self._train_data_path)
     dataset = dataset.apply(contrib_data.shuffle_and_repeat(buffer_size=1000))
@@ -111,17 +119,30 @@ class NSynthTFRecordDataset(BaseDataset):
     dataset = self._get_dataset_from_path()
     dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
 
-    # Filter just acoustic instruments (as in the paper)
-    # (0=acoustic, 1=electronic, 2=synthetic)
-    dataset = dataset.filter(lambda w, l, p, s: tf.equal(s, 0)[0])
-    # Filter just pitches 24-84
-    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, 24)[0])
-    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, 84)[0])
+    # Filter just specified instrument sources
+    def _is_wanted_source(s):
+      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
+    dataset = dataset.filter(lambda w, l, p, s: _is_wanted_source(s))
+    # Filter just specified pitches
+    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, self._min_pitch)[0])
+    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
     dataset = dataset.map(lambda w, l, p, s: (w, l))
     return dataset
 
   def get_pitch_counts(self):
-    pitch_counts = {
+    if self._train_meta_path:
+      with open(self._train_meta_path, "r") as meta_fp:
+        meta = json.load(meta_fp)
+      pitch_counts = {}
+      for name, note in meta.items():
+        pitch = note["pitch"]
+        if pitch in pitch_counts:
+          pitch_counts[pitch] += 1
+        else:
+          pitch_counts[pitch] = 1
+      import pdb; pdb.set_trace()
+    else:
+      pitch_counts = {
         24: 711,
         25: 720,
         26: 715,
@@ -183,7 +204,7 @@ class NSynthTFRecordDataset(BaseDataset):
         82: 1331,
         83: 1295,
         84: 1291
-    }
+      }
     return pitch_counts
 
 
