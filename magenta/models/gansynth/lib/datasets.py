@@ -140,7 +140,6 @@ class NSynthTFRecordDataset(BaseDataset):
           pitch_counts[pitch] += 1
         else:
           pitch_counts[pitch] = 1
-      import pdb; pdb.set_trace()
     else:
       pitch_counts = {
         24: 711,
