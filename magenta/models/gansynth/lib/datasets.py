@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import collections
 import json
+import os
 from magenta.models.gansynth.lib import spectral_ops
 from magenta.models.gansynth.lib import util
 import numpy as np
@@ -63,8 +64,8 @@ class NSynthTFRecordDataset(BaseDataset):
   """A dataset for reading NSynth from a TFRecord file."""
 
   def __init__(self, config):
-      super().__init__(config)
-      self._train_meta_path = util.expand_path(config['train_meta_path'])
+      super(NSynthTFRecordDataset, self).__init__(config)
+      self._train_meta_path = os.path.join(config['train_root_dir'], config['train_meta_path'])
       self._instrument_sources = config['train_instrument_sources']
       self._min_pitch = config['train_min_pitch']
       self._max_pitch = config['train_max_pitch']
