@@ -65,7 +65,14 @@ class NSynthTFRecordDataset(BaseDataset):
 
   def __init__(self, config):
       super(NSynthTFRecordDataset, self).__init__(config)
-      self._train_meta_path = os.path.join(config['train_root_dir'], config['train_meta_path'])
+      self._train_meta_path = None
+      if 'train_meta_path' in config and config['train_meta_path']:
+          self._train_meta_path = util.expand_path(config['train_meta_path'])
+      else:
+          magic_meta_path = os.path.join(config['train_root_dir'], 'meta.json')
+          if os.path.exists(magic_meta_path):
+              self._train_meta_path = magic_meta_path
+          
       self._instrument_sources = config['train_instrument_sources']
       self._min_pitch = config['train_min_pitch']
       self._max_pitch = config['train_max_pitch']
