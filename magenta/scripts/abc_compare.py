@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Compare a directory of abc and midi files.
 
 Assumes a directory of abc files converted with something like:
@@ -20,10 +21,6 @@ Assumes a directory of abc files converted with something like:
 ls *.abc | xargs -l1 sed -i '/R: hornpipe/d'
 ls *.abc | xargs -l1 abc2midi
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 import pdb

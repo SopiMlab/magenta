@@ -19,10 +19,6 @@ This module provides one class, AudioRecorder, which buffers chunks of audio
 from PyAudio.
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import importlib
 import math
 import queue
@@ -214,8 +210,10 @@ class AudioRecorder(object):
       num_audio_chunks = 1
     try:
       timeout = self.timeout_factor * self._chunk_duration_seconds
-      chunks, timestamps = zip(
-          *[self._get_chunk(timeout=timeout) for _ in range(num_audio_chunks)])
+      chunks, timestamps = list(
+          zip(*[
+              self._get_chunk(timeout=timeout) for _ in range(num_audio_chunks)
+          ]))
     except queue.Empty:
       error_message = 'Audio capture timed out after %.1f seconds.' % timeout
       logging.error(error_message)

@@ -106,6 +106,31 @@ def _extract_instrument(note_sequence, instrument):
   return extracted_ns
 
 
+def maybe_sample_items(seq, sample_size, randomize):
+  """Samples a seq if `sample_size` is provided and less than seq size."""
+  if not sample_size or len(seq) <= sample_size:
+    return seq
+  if randomize:
+    indices = set(np.random.choice(len(seq), size=sample_size, replace=False))
+    return [seq[i] for i in indices]
+  else:
+    return seq[:sample_size]
+
+
+def combine_converter_tensors(converter_tensors, max_num_tensors,
+                              randomize_sample):
+  """Combines multiple `ConverterTensors` into one and samples if required."""
+  results = []
+  for result in converter_tensors:
+    results.extend(zip(*result))
+  sampled_results = maybe_sample_items(results, max_num_tensors,
+                                       randomize_sample)
+  if sampled_results:
+    return ConverterTensors(*zip(*sampled_results))
+  else:
+    return ConverterTensors()
+
+
 def np_onehot(indices, depth, dtype=np.bool):
   """Converts 1D array of indices to a one-hot 2D array with given depth."""
   onehot_seq = np.zeros((len(indices), depth), dtype=dtype)
@@ -116,7 +141,7 @@ def np_onehot(indices, depth, dtype=np.bool):
 class NoteSequenceAugmenter(object):
   """Class for augmenting NoteSequences.
 
-  Args:
+  Attributes:
     transpose_range: A tuple containing the inclusive, integer range of
         transpose amounts to sample from. If None, no transposition is applied.
     stretch_range: A tuple containing the inclusive, float range of stretch
@@ -197,8 +222,8 @@ class BaseConverter(object):
   """Base class for data converters between items and tensors.
 
   Inheriting classes must implement the following abstract methods:
-    -`_to_tensors`
-    -`_to_items`
+    -`to_tensors`
+    -`from_tensors`
   """
 
   __metaclass__ = abc.ABCMeta
@@ -302,125 +327,22 @@ class BaseConverter(object):
     return self._length_shape
 
   @abc.abstractmethod
-  def _to_tensors(self, item):
-    """Implementation that converts item into encoder/decoder tensors.
-
-    Args:
-     item: Item to convert.
-
-    Returns:
-      A ConverterTensors struct containing encoder inputs, decoder outputs,
-      (optional) control tensors used for both encoding and decoding, and
-      sequence lengths.
-    """
+  def to_tensors(self, item):
+    """Python method that converts `item` into list of `ConverterTensors`."""
     pass
 
   @abc.abstractmethod
-  def _to_items(self, samples, controls=None):
-    """Implementation that decodes model samples into list of items."""
+  def from_tensors(self, samples, controls=None):
+    """Python method that decodes model samples into list of items."""
     pass
-
-  def _maybe_sample_outputs(self, outputs):
-    """If should limit outputs, returns up to limit (randomly if training)."""
-    if (not self.max_tensors_per_item or
-        len(outputs) <= self.max_tensors_per_item):
-      return outputs
-    if self.is_training:
-      indices = set(np.random.choice(
-          len(outputs), size=self.max_tensors_per_item, replace=False))
-      return [outputs[i] for i in indices]
-    else:
-      return outputs[:self.max_tensors_per_item]
-
-  def to_tensors(self, item):
-    """Python method that converts `item` into list of tensors."""
-    tensors = self._to_tensors(item)
-    sampled_results = self._maybe_sample_outputs(list(zip(*tensors)))
-    if sampled_results:
-      return ConverterTensors(*zip(*sampled_results))
-    else:
-      return ConverterTensors()
-
-  def _combine_to_tensor_results(self, to_tensor_results):
-    """Combines the results of multiple to_tensors calls into one result."""
-    results = []
-    for result in to_tensor_results:
-      results.extend(zip(*result))
-    sampled_results = self._maybe_sample_outputs(results)
-    if sampled_results:
-      return ConverterTensors(*zip(*sampled_results))
-    else:
-      return ConverterTensors()
-
-  def to_items(self, samples, controls=None):
-    """Python method that decodes samples into list of items."""
-    if controls is None:
-      return self._to_items(samples)
-    else:
-      return self._to_items(samples, controls)
-
-  # TODO(b/144556490): Remove `do_not_convert` when fixed.
-  @tf.autograph.experimental.do_not_convert
-  def tf_to_tensors(self, item_scalar):
-    """TensorFlow op that converts item into output tensors.
-
-    Sequences will be padded to match the length of the longest.
-
-    Args:
-      item_scalar: A scalar of type tf.String containing the raw item to be
-          converted to tensors.
-
-    Returns:
-      inputs: A Tensor, shaped [num encoded seqs, max(lengths), input_depth],
-          containing the padded input encodings.
-      outputs: A Tensor, shaped [num encoded seqs, max(lengths), output_depth],
-          containing the padded output encodings resulting from the input.
-      controls: A Tensor, shaped
-          [num encoded seqs, max(lengths), control_depth], containing the padded
-          control encodings.
-      lengths: A tf.int32 Tensor, shaped [num encoded seqs], containing the
-        unpadded lengths of the tensor sequences resulting from the input.
-    """
-    def _convert_and_pad(item_str):
-      item = self.str_to_item_fn(item_str.numpy())  # pylint:disable=not-callable
-      tensors = self.to_tensors(item)
-      inputs = _maybe_pad_seqs(
-          tensors.inputs, self.input_dtype, self.input_depth)
-      outputs = _maybe_pad_seqs(
-          tensors.outputs, self.output_dtype, self.output_depth)
-      controls = _maybe_pad_seqs(
-          tensors.controls, self.control_dtype, self.control_depth)
-      return inputs, outputs, controls, np.array(tensors.lengths, np.int32)
-    inputs, outputs, controls, lengths = tf.py_function(
-        _convert_and_pad,
-        inp=[item_scalar],
-        Tout=[
-            self.input_dtype, self.output_dtype, self.control_dtype, tf.int32],
-        name='convert_and_pad')
-    inputs.set_shape([None, None, self.input_depth])
-    outputs.set_shape([None, None, self.output_depth])
-    controls.set_shape([None, None, self.control_depth])
-    lengths.set_shape([None] + list(self.length_shape))
-    return inputs, outputs, controls, lengths
-
-
-def preprocess_notesequence(note_sequence, presplit_on_time_changes):
-  """Preprocesses a single NoteSequence, resulting in multiple sequences."""
-  if presplit_on_time_changes:
-    note_sequences = sequences_lib.split_note_sequence_on_time_changes(
-        note_sequence)
-  else:
-    note_sequences = [note_sequence]
-
-  return note_sequences
 
 
 class BaseNoteSequenceConverter(BaseConverter):
   """Base class for NoteSequence data converters.
 
   Inheriting classes must implement the following abstract methods:
-    -`_to_tensors`
-    -`_to_notesequences`
+    -`to_tensors`
+    -`from_tensors`
   """
 
   __metaclass__ = abc.ABCMeta
@@ -461,32 +383,6 @@ class BaseNoteSequenceConverter(BaseConverter):
   def max_tensors_per_notesequence(self, value):
     self.max_tensors_per_item = value
 
-  @abc.abstractmethod
-  def _to_notesequences(self, samples, controls=None):
-    """Implementation that decodes model samples into list of NoteSequences."""
-    pass
-
-  def to_notesequences(self, samples, controls=None):
-    """Python method that decodes samples into list of NoteSequences."""
-    return self._to_items(samples, controls)
-
-  def to_tensors(self, note_sequence):
-    """Python method that converts `note_sequence` into list of tensors."""
-    note_sequences = preprocess_notesequence(
-        note_sequence, self._presplit_on_time_changes)
-
-    results = []
-    for ns in note_sequences:
-      results.append(super(BaseNoteSequenceConverter, self).to_tensors(ns))
-    return self._combine_to_tensor_results(results)
-
-  def _to_items(self, samples, controls=None):
-    """Python method that decodes samples into list of NoteSequences."""
-    if controls is None:
-      return self._to_notesequences(samples)
-    else:
-      return self._to_notesequences(samples, controls)
-
 
 class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
   """Converts NoteSequences using legacy OneHotEncoding framework.
@@ -495,7 +391,7 @@ class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
   uniquifies, and converts to encoding. Uses the OneHotEncoding's
   output encoding for both the input and output.
 
-  Args:
+  Attributes:
     event_list_fn: A function that returns a new EventSequence.
     event_extractor_fn: A function for extracing events into EventSequences. The
       sole input should be the quantized NoteSequence.
@@ -560,7 +456,7 @@ class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
         presplit_on_time_changes=presplit_on_time_changes,
         max_tensors_per_notesequence=max_tensors_per_notesequence)
 
-  def _to_tensors(self, note_sequence):
+  def to_tensors(self, note_sequence):
     """Converts NoteSequence to unique, one-hot tensor sequences."""
     try:
       if self._steps_per_quarter:
@@ -612,7 +508,9 @@ class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
     # be mapped to identical tensors by the encoder_decoder (e.g., Drums).
 
     unique_event_tuples = list(set(tuple(l) for l in sliced_event_lists))
-    unique_event_tuples = self._maybe_sample_outputs(unique_event_tuples)
+    unique_event_tuples = maybe_sample_items(unique_event_tuples,
+                                             self.max_tensors_per_item,
+                                             self.is_training)
 
     if not unique_event_tuples:
       return ConverterTensors()
@@ -647,7 +545,8 @@ class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
 
     return ConverterTensors(inputs=seqs, outputs=seqs, controls=control_seqs)
 
-  def _to_notesequences(self, samples, controls=None):
+  def from_tensors(self, samples, controls=None):
+    """Converts model samples to a list of `NoteSequence`s."""
     output_sequences = []
     for i, sample in enumerate(samples):
       s = np.argmax(sample, axis=-1)
@@ -679,7 +578,7 @@ class LegacyEventListOneHotConverter(BaseNoteSequenceConverter):
 class OneHotMelodyConverter(LegacyEventListOneHotConverter):
   """Converter for legacy MelodyOneHotEncoding.
 
-  Args:
+  Attributes:
     min_pitch: The minimum pitch to model. Those below this value will be
       ignored.
     max_pitch: The maximum pitch to model. Those above this value will be
@@ -741,7 +640,7 @@ class OneHotMelodyConverter(LegacyEventListOneHotConverter):
         presplit_on_time_changes=presplit_on_time_changes,
         chord_encoding=chord_encoding)
 
-  def _to_tensors(self, note_sequence):
+  def _to_tensors_fn(self, note_sequence):
     def is_valid(note):
       if (self._valid_programs is not None and
           note.program not in self._valid_programs):
@@ -750,7 +649,13 @@ class OneHotMelodyConverter(LegacyEventListOneHotConverter):
     notes = list(note_sequence.notes)
     del note_sequence.notes[:]
     note_sequence.notes.extend([n for n in notes if is_valid(n)])
-    return super(OneHotMelodyConverter, self)._to_tensors(note_sequence)
+    return super(OneHotMelodyConverter, self).to_tensors(note_sequence)
+
+  def to_tensors(self, note_sequence):
+    return split_process_and_combine(note_sequence,
+                                     self._presplit_on_time_changes,
+                                     self.max_tensors_per_item,
+                                     self.is_training, self._to_tensors_fn)
 
 
 class DrumsConverter(BaseNoteSequenceConverter):
@@ -762,7 +667,7 @@ class DrumsConverter(BaseNoteSequenceConverter):
   The "roll" input encoding includes a final NOR bit (after the optional end
   token).
 
-  Args:
+  Attributes:
     max_bars: Optional maximum number of bars per extracted drums, before
       slicing.
     slice_bars: Optional size of window to slide over raw Melodies after
@@ -794,9 +699,9 @@ class DrumsConverter(BaseNoteSequenceConverter):
                roll_output=False, max_tensors_per_notesequence=5,
                presplit_on_time_changes=True):
     self._pitch_classes = pitch_classes or REDUCED_DRUM_PITCH_CLASSES
-    self._pitch_class_map = {
-        p: i for i, pitches in enumerate(self._pitch_classes) for p in pitches}
-
+    self._pitch_class_map = {}
+    for i, pitches in enumerate(self._pitch_classes):
+      self._pitch_class_map.update({p: i for p in pitches})
     self._steps_per_quarter = steps_per_quarter
     self._steps_per_bar = steps_per_quarter * quarters_per_bar
     self._slice_steps = self._steps_per_bar * slice_bars if slice_bars else None
@@ -839,7 +744,7 @@ class DrumsConverter(BaseNoteSequenceConverter):
         presplit_on_time_changes=presplit_on_time_changes,
         max_tensors_per_notesequence=max_tensors_per_notesequence)
 
-  def _to_tensors(self, note_sequence):
+  def _to_tensors_fn(self, note_sequence):
     """Converts NoteSequence to unique sequences."""
     try:
       quantized_sequence = mm.quantize_note_sequence(
@@ -877,7 +782,9 @@ class DrumsConverter(BaseNoteSequenceConverter):
       sliced_event_tuples = [tuple(l) for l in event_lists]
 
     unique_event_tuples = list(set(sliced_event_tuples))
-    unique_event_tuples = self._maybe_sample_outputs(unique_event_tuples)
+    unique_event_tuples = maybe_sample_items(unique_event_tuples,
+                                             self.max_tensors_per_item,
+                                             self.is_training)
 
     rolls = []
     oh_vecs = []
@@ -910,7 +817,13 @@ class DrumsConverter(BaseNoteSequenceConverter):
 
     return ConverterTensors(inputs=input_seqs, outputs=output_seqs)
 
-  def _to_notesequences(self, samples):
+  def to_tensors(self, note_sequence):
+    return split_process_and_combine(note_sequence,
+                                     self._presplit_on_time_changes,
+                                     self.max_tensors_per_item,
+                                     self.is_training, self._to_tensors_fn)
+
+  def from_tensors(self, samples, unused_controls=None):
     output_sequences = []
     for s in samples:
       if self._roll_output:
@@ -942,7 +855,7 @@ class TrioConverter(BaseNoteSequenceConverter):
   and OneHotDrumsConverter. Takes the cross products from the sets of
   instruments of each type.
 
-  Args:
+  Attributes:
     slice_bars: Optional size of window to slide over full converted tensor.
     gap_bars: The number of consecutive empty bars to allow for any given
       instrument. Note that this number is effectively doubled for internal
@@ -1003,7 +916,8 @@ class TrioConverter(BaseNoteSequenceConverter):
         presplit_on_time_changes=True,
         max_tensors_per_notesequence=max_tensors_per_notesequence)
 
-  def _to_tensors(self, note_sequence):
+  def _to_tensors_fn(self, note_sequence):
+    """Converts a `NoteSequence` to `ConverterTensors` obj."""
     try:
       quantized_sequence = mm.quantize_note_sequence(
           note_sequence, self._steps_per_quarter)
@@ -1134,16 +1048,22 @@ class TrioConverter(BaseNoteSequenceConverter):
 
     return ConverterTensors(inputs=seqs, outputs=seqs, controls=control_seqs)
 
-  def _to_notesequences(self, samples, controls=None):
+  def to_tensors(self, note_sequence):
+    return split_process_and_combine(note_sequence,
+                                     self._presplit_on_time_changes,
+                                     self.max_tensors_per_item,
+                                     self.is_training, self._to_tensors_fn)
+
+  def from_tensors(self, samples, controls=None):
     output_sequences = []
     dim_ranges = np.cumsum(self._split_output_depths)
     for i, s in enumerate(samples):
-      mel_ns = self._melody_converter.to_notesequences(
+      mel_ns = self._melody_converter.from_tensors(
           [s[:, :dim_ranges[0]]],
           [controls[i]] if controls is not None else None)[0]
-      bass_ns = self._melody_converter.to_notesequences(
+      bass_ns = self._melody_converter.from_tensors(
           [s[:, dim_ranges[0]:dim_ranges[1]]])[0]
-      drums_ns = self._drums_converter.to_notesequences(
+      drums_ns = self._drums_converter.from_tensors(
           [s[:, dim_ranges[1]:]])[0]
 
       for n in bass_ns.notes:
@@ -1187,6 +1107,84 @@ def count_examples(examples_path, tfds_name, data_converter,
     num_examples += len(tensors.inputs)
   tf.logging.info('Total examples: %d', num_examples)
   return num_examples
+
+
+def split_process_and_combine(note_sequence, split, sample_size, randomize,
+                              to_tensors_fn):
+  """Splits a `NoteSequence`, processes and combines the `ConverterTensors`.
+
+  Args:
+    note_sequence: The `NoteSequence` to split, process and combine.
+    split: If True, the given note_sequence is split into multiple based on time
+      changes, and the tensor outputs are concatenated.
+    sample_size: Outputs are sampled if size exceeds this value.
+    randomize: If True, outputs are randomly sampled (this is generally done
+      during training).
+    to_tensors_fn: A fn that converts a `NoteSequence` to `ConverterTensors`.
+
+  Returns:
+    A `ConverterTensors` obj.
+  """
+  note_sequences = sequences_lib.split_note_sequence_on_time_changes(
+      note_sequence) if split else [note_sequence]
+  results = []
+  for ns in note_sequences:
+    tensors = to_tensors_fn(ns)
+    sampled_results = maybe_sample_items(
+        list(zip(*tensors)), sample_size, randomize)
+    if sampled_results:
+      results.append(ConverterTensors(*zip(*sampled_results)))
+    else:
+      results.append(ConverterTensors())
+  return combine_converter_tensors(results, sample_size, randomize)
+
+
+def convert_to_tensors_op(item_scalar, converter):
+  """TensorFlow op that converts item into output tensors.
+
+  Sequences will be padded to match the length of the longest.
+
+  Args:
+    item_scalar: A scalar of type tf.String containing the raw item to be
+      converted to tensors.
+    converter: The DataConverter to be used.
+
+  Returns:
+    inputs: A Tensor, shaped [num encoded seqs, max(lengths), input_depth],
+        containing the padded input encodings.
+    outputs: A Tensor, shaped [num encoded seqs, max(lengths), output_depth],
+        containing the padded output encodings resulting from the input.
+    controls: A Tensor, shaped
+        [num encoded seqs, max(lengths), control_depth], containing the padded
+        control encodings.
+    lengths: A tf.int32 Tensor, shaped [num encoded seqs], containing the
+      unpadded lengths of the tensor sequences resulting from the input.
+  """
+
+  def _convert_and_pad(item_str):
+    item = converter.str_to_item_fn(item_str.numpy())  # pylint:disable=not-callable
+    tensors = converter.to_tensors(item)
+    inputs = _maybe_pad_seqs(tensors.inputs, converter.input_dtype,
+                             converter.input_depth)
+    outputs = _maybe_pad_seqs(tensors.outputs, converter.output_dtype,
+                              converter.output_depth)
+    controls = _maybe_pad_seqs(tensors.controls, converter.control_dtype,
+                               converter.control_depth)
+    return inputs, outputs, controls, np.array(tensors.lengths, np.int32)
+
+  inputs, outputs, controls, lengths = tf.py_function(
+      _convert_and_pad,
+      inp=[item_scalar],
+      Tout=[
+          converter.input_dtype, converter.output_dtype,
+          converter.control_dtype, tf.int32
+      ],
+      name='convert_and_pad')
+  inputs.set_shape([None, None, converter.input_depth])
+  outputs.set_shape([None, None, converter.output_depth])
+  controls.set_shape([None, None, converter.control_depth])
+  lengths.set_shape([None] + list(converter.length_shape))
+  return inputs, outputs, controls, lengths
 
 
 def get_dataset(
@@ -1260,12 +1258,12 @@ def get_dataset(
 
   if note_sequence_augmenter is not None:
     dataset = dataset.map(note_sequence_augmenter.tf_augment)
-  dataset = (dataset
-             .map(data_converter.tf_to_tensors,
-                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
-             .flat_map(lambda *t: tf.data.Dataset.from_tensor_slices(t))
-             .map(_remove_pad_fn,
-                  num_parallel_calls=tf.data.experimental.AUTOTUNE))
+
+  dataset = (
+      dataset.map(
+          functools.partial(convert_to_tensors_op, converter=data_converter),
+          num_parallel_calls=tf.data.experimental.AUTOTUNE).unbatch().map(
+              _remove_pad_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE))
   if cache_dataset:
     dataset = dataset.cache()
   if is_training:
@@ -1273,7 +1271,7 @@ def get_dataset(
 
   dataset = dataset.padded_batch(
       batch_size,
-      dataset.output_shapes,
+      tf.data.get_output_shapes(dataset),
       drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
 
   return dataset
@@ -1298,7 +1296,7 @@ class GrooveConverter(BaseNoteSequenceConverter):
   at a single timestep is of length 9x3 = 27. So a single measure of drums
   at a 16th note grid is a matrix of shape (16, 27).
 
-  Args:
+  Attributes:
     split_bars: Optional size of window to slide over full converted tensor.
     steps_per_quarter: The number of quantization steps per quarter note.
     quarters_per_bar: The number of quarter notes per bar.
@@ -1425,7 +1423,7 @@ class GrooveConverter(BaseNoteSequenceConverter):
     return self._pitch_classes
 
   @property
-  def pitch_class_map(self):
+  def pitch_class_map(self):  # pylint: disable=g-missing-from-attributes
     if self.is_inferring:
       return self._infer_pitch_class_map
     return self._pitch_class_map
@@ -1478,7 +1476,7 @@ class GrooveConverter(BaseNoteSequenceConverter):
     else:
       raise ValueError('Unlisted feature: ' + feature)
 
-  def _to_tensors(self, note_sequence):
+  def to_tensors(self, note_sequence):
 
     def _get_steps_hash(note_sequence):
       """Partitions all Notes in a NoteSequence by quantization step and drum.
@@ -1679,7 +1677,7 @@ class GrooveConverter(BaseNoteSequenceConverter):
 
     return ConverterTensors(inputs=input_seqs, outputs=seqs, controls=controls)
 
-  def _to_notesequences(self, samples, controls=None):
+  def from_tensors(self, samples, controls=None):
 
     def _zero_one_to_velocity(val):
       output = int(np.round(val*127))

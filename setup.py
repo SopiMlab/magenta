@@ -40,6 +40,7 @@ REQUIRED_PACKAGES = [
     # a version of cloudpickle that is incompatible with tensorflow-probability
     # 0.7.0.
     'gym < 0.16.0',
+    'imageio',
     'intervaltree >= 2.1.0',
     'joblib >= 0.12',
     'librosa >= 0.6.2',
@@ -69,6 +70,9 @@ REQUIRED_PACKAGES = [
     'wheel',
     'futures;python_version=="2.7"',
     'apache-beam[gcp] >= 2.14.0, < 2.19.0',  # Temporary fix for 'typing' issue
+    # Temporary fix for:
+    # https://issues.apache.org/jira/projects/AVRO/issues/AVRO-2737?filter=allopenissues
+    'avro-python3 !=1.9.2',
 ]
 
 EXTRAS_REQUIRE = {
@@ -107,8 +111,9 @@ CONSOLE_SCRIPTS = [
     'magenta.models.music_vae.music_vae_train',
     'magenta.models.nsynth.wavenet.nsynth_generate',
     'magenta.models.nsynth.wavenet.nsynth_save_embeddings',
+    'magenta.models.onsets_frames_transcription.onsets_frames_transcription_create_dataset',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_create_dataset_maps',
-    'magenta.models.onsets_frames_transcription.onsets_frames_transcription_create_dataset_maestro',
+    'magenta.models.onsets_frames_transcription.onsets_frames_transcription_create_tfrecords',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_infer',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_train',
     'magenta.models.onsets_frames_transcription.onsets_frames_transcription_transcribe',
@@ -147,7 +152,6 @@ setup(
         'Intended Audience :: Education',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: Apache Software License',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Topic :: Scientific/Engineering :: Mathematics',
         'Topic :: Software Development :: Libraries :: Python Modules',

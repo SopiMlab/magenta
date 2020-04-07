@@ -26,7 +26,7 @@ from magenta.models.onsets_frames_transcription import constants
 from magenta.models.onsets_frames_transcription import infer_util
 from magenta.models.onsets_frames_transcription import metrics
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import tensorflow.contrib.slim as slim
 from tensorflow.contrib import cudnn_rnn as contrib_cudnn_rnn
@@ -397,6 +397,8 @@ def model_fn(features, labels, mode, params, config):
   velocity_values = tf.expand_dims(velocity_values_flat, axis=0)
 
   metrics_values = metrics.define_metrics(
+      frame_probs=frame_probs,
+      onset_probs=onset_probs,
       frame_predictions=frame_predictions,
       onset_predictions=onset_predictions,
       offset_predictions=offset_predictions,
@@ -412,28 +414,40 @@ def model_fn(features, labels, mode, params, config):
     metrics_values[loss_label] = loss_collection
 
   def predict_sequence():
-    """Convert frame predictions into a sequence."""
-    def _predict(frame_predictions, onset_predictions, offset_predictions,
-                 velocity_values):
+    """Convert frame predictions into a sequence (TF)."""
+
+    def _predict(frame_probs, onset_probs, frame_predictions, onset_predictions,
+                 offset_predictions, velocity_values):
+      """Convert frame predictions into a sequence (Python)."""
       sequence = infer_util.predict_sequence(
+          frame_probs=frame_probs,
+          onset_probs=onset_probs,
           frame_predictions=frame_predictions,
           onset_predictions=onset_predictions,
           offset_predictions=offset_predictions,
           velocity_values=velocity_values,
-          hparams=hparams, min_pitch=constants.MIN_MIDI_PITCH)
+          hparams=hparams,
+          min_pitch=constants.MIN_MIDI_PITCH)
       return sequence.SerializeToString()
 
     sequence = tf.py_func(
         _predict,
         inp=[
-            frame_predictions[0], onset_predictions[0], offset_predictions[0],
+            frame_probs[0],
+            onset_probs[0],
+            frame_predictions[0],
+            onset_predictions[0],
+            offset_predictions[0],
             velocity_values[0],
-        ], Tout=tf.string, stateful=False)
+        ],
+        Tout=tf.string,
+        stateful=False)
     sequence.set_shape([])
     return tf.expand_dims(sequence, axis=0)
 
   predictions = {
-      'frame_probs': tf.expand_dims(frame_probs_flat, axis=0),
+      'frame_probs': frame_probs,
+      'onset_probs': onset_probs,
       'frame_predictions': frame_predictions,
       'onset_predictions': onset_predictions,
       'offset_predictions': offset_predictions,
@@ -444,6 +458,7 @@ def model_fn(features, labels, mode, params, config):
       'sequence_ids': features.sequence_id,
       'sequence_labels': labels.note_sequence,
       'frame_labels': labels.labels,
+      'onset_labels': labels.onsets,
   }
   for k, v in metrics_values.items():
     predictions[k] = tf.stack(v)

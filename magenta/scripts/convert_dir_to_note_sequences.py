@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 r""""Converts music files to NoteSequence protos and writes TFRecord file.
 
 Currently supports MIDI (.mid, .midi) and MusicXML (.xml, .mxl) files.
@@ -188,7 +189,7 @@ def convert_abc(root_dir, sub_dir, full_file_path):
         '%s', full_file_path, exception)
 
   sequences = []
-  for idx, tune in tunes.iteritems():
+  for idx, tune in tunes.items():
     tune.collection_name = os.path.basename(root_dir)
     tune.filename = os.path.join(sub_dir, os.path.basename(full_file_path))
     tune.id = note_sequence_io.generate_note_sequence_id(
