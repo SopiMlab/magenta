@@ -375,8 +375,8 @@ class Model(object):
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
-    num_qualities = data_helper.get_qualities_count()
-    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches + num_qualities)
+    num_extra_labels = data_helper.get_extra_labels_count()
+    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches + num_extra_labels)
     with load_scope:
       fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
@@ -509,26 +509,36 @@ class Model(object):
     z = self.generate_z(len(pitches))
     return self.generate_samples_from_z(z, pitches, max_audio_length)
 
-  def generate_samples_from_z(self, z, pitches, max_audio_length=64000, extra_labels=None):
+  def generate_samples_from_z(self, z, pitches, max_audio_length=64000, extra_labelses=None):
     """Generate fake samples for given latents and pitches.
 
     Args:
       z: A numpy array of latent vectors [n_samples, n_latent dims].
       pitches: An iterable list of integer MIDI pitches [n_samples].
       max_audio_length: Integer, trim to this many samples.
+      extra_labelses: List of lists containing extra labels to be added for each sample [n_samples, n_extra_labels].
 
     Returns:
       audio: Generated audio waveforms [n_samples, max_audio_length]
     """
-    labels = self._pitches_to_labels(pitches)
-    if extra_labels != None:
-      labels.extend(extra_labels)
-    n_samples = len(labels)
+
+    assert len(z) == len(pitches)
+    assert len(z) > 0
+    if extra_labelses != None:
+      assert len(extra_labelses) == len(z)
+      assert all((len(extra_labels) == len(extra_labelses[0]) for extra_labels in extra_labelses[1:]))
+    
+    labelses = [[label] for label in self._pitches_to_labels(pitches)]
+    if extra_labelses:
+      labelses = [labels + extra_labels for labels, extra_labels in zip(labelses, extra_labelses)]
+    n_samples = len(labelses)
+    n_labels = len(labelses[0])
     num_batches = int(np.ceil(float(n_samples) / self.batch_size))
     n_tot = num_batches * self.batch_size
     padding = n_tot - n_samples
     # Pads zeros to make batches even batch size.
-    labels = labels + [0] * padding
+    for i in range(padding):
+      labelses.append([0] * n_labels)
     z = np.concatenate([z, np.zeros([padding, z.shape[1]])], axis=0)
 
     # Generate waves
@@ -538,9 +548,13 @@ class Model(object):
       start = i * self.batch_size
       end = (i + 1) * self.batch_size
 
-      waves = self.sess.run(self.fake_waves_ph,
-                            feed_dict={self.labels_ph: labels[start:end],
-                                       self.noises_ph: z[start:end]})
+      waves = self.sess.run(
+        self.fake_waves_ph,
+        feed_dict = {
+          self.labels_ph: [label for labels in labelses[start:end] for label in labels],
+          self.noises_ph: z[start:end]
+        }
+      )
       # Trim waves
       for wave in waves:
         waves_list.append(wave[:max_audio_length, 0])

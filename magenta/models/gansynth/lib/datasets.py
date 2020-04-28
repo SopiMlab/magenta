@@ -49,7 +49,7 @@ class BaseDataset(object):
     """Returns a dictionary {pitch value (int): count (int)}."""
     raise NotImplementedError
 
-  def get_qualities_count(self):
+  def get_extra_labels_count(self):
     raise NotImplementedError
   
   def get_pitches(self, num_samples):
@@ -95,19 +95,9 @@ class NSynthTFRecordDataset(BaseDataset):
     counts = [pitch_counts[p] for p in pitches]
     indices = tf.reshape(
         tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    #one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-    pitch_one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-
-    qualities_count = 10 # TODO: Remove hard coding
-    
-    indices = tf.random.uniform([batch_size], minval=0, maxval=qualities_count, dtype=tf.int64)
-    qualities_one_hot_labels = tf.one_hot(indices, depth=qualities_count)
-
-    one_hot_labels = tf.concat([pitch_one_hot_labels, qualities_one_hot_labels], axis=1)
-
-
+    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
     return one_hot_labels
-
+  
   def provide_dataset(self):
     """Provides dataset (audio, labels) of nsynth."""
     length = 64000
@@ -133,14 +123,8 @@ class NSynthTFRecordDataset(BaseDataset):
       wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
                                       length,
                                       channels)[0]
-      pitch_one_hot_label = tf.one_hot(
+      one_hot_label = tf.one_hot(
           label_index_table.lookup(label), depth=len(pitches))[0]
-      
-      qualities_one_hot_label = tf.one_hot(
-        example['qualities'], depth=self.get_qualities_count())[0]
-
-      one_hot_label = tf.concat([pitch_one_hot_label, qualities_one_hot_label], axis=0)
-      
       return wave, one_hot_label, label, example['instrument_source']
 
     dataset = self._get_dataset_from_path()
@@ -233,10 +217,83 @@ class NSynthTFRecordDataset(BaseDataset):
       }
     return pitch_counts
 
-  def get_qualities_count(self):
-    return 10 # TODO: avoid hardcoding
+  def get_extra_labels_count(self):
+    return 0
 
+class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
+  def provide_dataset(self):
+    """Provides dataset (audio, labels) of nsynth."""
+    length = 64000
+    channels = 1
+
+    pitch_counts = self.get_pitch_counts()
+    pitches = sorted(pitch_counts.keys())
+    label_index_table = contrib_lookup.index_table_from_tensor(
+        sorted(pitches), dtype=tf.int64)
+
+    def _parse_nsynth(record):
+      """Parsing function for NSynth dataset."""
+      features = {
+          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
+          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
+          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
+          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
+          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
+      }
+
+      example = tf.parse_single_example(record, features)
+      wave, label = example['audio'], example['pitch']
+      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
+                                      length,
+                                      channels)[0]
+      pitch_one_hot_label = tf.one_hot(
+          label_index_table.lookup(label), depth=len(pitches))[0]
+      
+      qualities_one_hot_label = tf.one_hot(
+        example['qualities'], depth=self.get_qualities_count())[0]
+
+      one_hot_label = tf.concat([pitch_one_hot_label, qualities_one_hot_label], axis=0)
+      
+      return wave, one_hot_label, label, example['instrument_source']
+
+    dataset = self._get_dataset_from_path()
+    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
+
+    # Filter just specified instrument sources
+    def _is_wanted_source(s):
+      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
+    dataset = dataset.filter(lambda w, l, p, s: _is_wanted_source(s))
+    # Filter just specified pitches
+    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, self._min_pitch)[0])
+    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
+    dataset = dataset.map(lambda w, l, p, s: (w, l))
+    return dataset
+
+  def provide_one_hot_labels(self, batch_size):
+    """Provides one hot labels."""
+    pitch_counts = self.get_pitch_counts()
+    pitches = sorted(pitch_counts.keys())
+    counts = [pitch_counts[p] for p in pitches]
+    indices = tf.reshape(
+        tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
+    pitch_one_hot_labels = tf.one_hot(indices, depth=len(pitches))
+
+    qualities_count = self.get_qualities_count()
+    
+    indices = tf.random.uniform([batch_size], minval=0, maxval=qualities_count, dtype=tf.int64)
+    qualities_one_hot_labels = tf.one_hot(indices, depth=qualities_count)
+
+    one_hot_labels = tf.concat([pitch_one_hot_labels, qualities_one_hot_labels], axis=1)
+
+    return one_hot_labels
+  
+  def get_qualities_count(self):
+    return 10 # TODO: don't hardcode
+  
+  def get_extra_labels_count(self):
+    return self.get_qualities_count()
 
 registry = {
     'nsynth_tfrecord': NSynthTFRecordDataset,
+    'nsynth_qualities_tfrecord': NSynthQualitiesTFRecordDataset
 }
