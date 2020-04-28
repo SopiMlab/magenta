@@ -509,7 +509,7 @@ class Model(object):
     z = self.generate_z(len(pitches))
     return self.generate_samples_from_z(z, pitches, max_audio_length)
 
-  def generate_samples_from_z(self, z, pitches, max_audio_length=64000):
+  def generate_samples_from_z(self, z, pitches, max_audio_length=64000, extra_labels=None):
     """Generate fake samples for given latents and pitches.
 
     Args:
@@ -521,6 +521,8 @@ class Model(object):
       audio: Generated audio waveforms [n_samples, max_audio_length]
     """
     labels = self._pitches_to_labels(pitches)
+    if extra_labels != None:
+      labels.extend(extra_labels)
     n_samples = len(labels)
     num_batches = int(np.ceil(float(n_samples) / self.batch_size))
     n_tot = num_batches * self.batch_size
