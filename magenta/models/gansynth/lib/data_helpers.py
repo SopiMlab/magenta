@@ -53,6 +53,9 @@ class DataHelper(object):
     """Returns a dictionary {pitch value (int): count (int)}."""
     return self.dataset.get_pitch_counts()
 
+  def get_qualities_count(self):
+    return self.dataset.get_qualities_count()
+  
   def provide_one_hot_labels(self, batch_size):
     """Returns a batch of one-hot labels."""
     with tf.name_scope('inputs'):
