@@ -100,7 +100,7 @@ class NSynthTFRecordDataset(BaseDataset):
 
     qualities_count = 10 # TODO: Remove hard coding
     
-    indices = tf.random.uniform([batch_size], minval=0, maxval=quality_count, dtype=tf.int64)
+    indices = tf.random.uniform([batch_size], minval=0, maxval=qualities_count, dtype=tf.int64)
     qualities_one_hot_labels = tf.one_hot(indices, depth=qualities_count)
 
     one_hot_labels = tf.concat([pitch_one_hot_labels, qualities_one_hot_labels], axis=1)
