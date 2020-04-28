@@ -49,6 +49,9 @@ class BaseDataset(object):
     """Returns a dictionary {pitch value (int): count (int)}."""
     raise NotImplementedError
 
+  def get_qualities_count(self):
+    raise NotImplementedError
+  
   def get_pitches(self, num_samples):
     """Returns pitch_counter for num_samples for given dataset."""
     all_pitches = []
@@ -92,7 +95,17 @@ class NSynthTFRecordDataset(BaseDataset):
     counts = [pitch_counts[p] for p in pitches]
     indices = tf.reshape(
         tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
+    #one_hot_labels = tf.one_hot(indices, depth=len(pitches))
+    pitch_one_hot_labels = tf.one_hot(indices, depth=len(pitches))
+
+    qualities_count = 10 # TODO: Remove hard coding
+    
+    indices = tf.random.uniform([batch_size], minval=0, maxval=quality_count, dtype=tf.int64)
+    qualities_one_hot_labels = tf.one_hot(indices, depth=qualities_count)
+
+    one_hot_labels = tf.concat([pitch_one_hot_labels, qualities_one_hot_labels], axis=1)
+
+
     return one_hot_labels
 
   def provide_dataset(self):
@@ -120,8 +133,12 @@ class NSynthTFRecordDataset(BaseDataset):
       wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
                                       length,
                                       channels)[0]
-      one_hot_label = tf.one_hot(
+      pitch_one_hot_label = tf.one_hot(
           label_index_table.lookup(label), depth=len(pitches))[0]
+      
+      qualities_one_hot_label = tf.one_hot(
+        example['qualities'], depth=self.get_qualities_count())[0]
+
       return wave, one_hot_label, label, example['instrument_source']
 
     dataset = self._get_dataset_from_path()
@@ -136,7 +153,7 @@ class NSynthTFRecordDataset(BaseDataset):
     dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
     dataset = dataset.map(lambda w, l, p, s: (w, l))
     return dataset
-
+  
   def get_pitch_counts(self):
     if self._train_meta_path:
       with open(self._train_meta_path, "r") as meta_fp:
@@ -213,6 +230,9 @@ class NSynthTFRecordDataset(BaseDataset):
         84: 1291
       }
     return pitch_counts
+
+  def get_qualities_count(self):
+    return 10 # TODO: avoid hardcoding
 
 
 registry = {

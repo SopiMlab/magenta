@@ -375,7 +375,8 @@ class Model(object):
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
-    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
+    num_qualities = data_helper.get_qualities_count()
+    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches + num_qualities)
     with load_scope:
       fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
