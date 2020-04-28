@@ -139,6 +139,8 @@ class NSynthTFRecordDataset(BaseDataset):
       qualities_one_hot_label = tf.one_hot(
         example['qualities'], depth=self.get_qualities_count())[0]
 
+      one_hot_label = tf.concat([pitch_one_hot_label, qualities_one_hot_label], axis=0)
+      
       return wave, one_hot_label, label, example['instrument_source']
 
     dataset = self._get_dataset_from_path()
