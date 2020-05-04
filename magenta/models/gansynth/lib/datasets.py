@@ -249,10 +249,9 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
       pitch_one_hot_label = tf.one_hot(
           label_index_table.lookup(label), depth=len(pitches))[0]
       
-      qualities_one_hot_label = tf.one_hot(
-        example['qualities'], depth=self.get_qualities_count())[0]
-
-      one_hot_label = tf.concat([pitch_one_hot_label, qualities_one_hot_label], axis=0)
+      quality_labels = tf.constant(example['qualities'])
+      
+      one_hot_label = tf.concat([pitch_one_hot_label, quality_labels], axis=0)
       
       return wave, one_hot_label, label, example['instrument_source']
 
@@ -280,10 +279,9 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
 
     qualities_count = self.get_qualities_count()
     
-    indices = tf.random.uniform([batch_size], minval=0, maxval=qualities_count, dtype=tf.int64)
-    qualities_one_hot_labels = tf.one_hot(indices, depth=qualities_count)
+    quality_labels = tf.random.uniform([batch_size, qualities_count], minval=0, maxval=1, dtype=tf.int64)
 
-    one_hot_labels = tf.concat([pitch_one_hot_labels, qualities_one_hot_labels], axis=1)
+    one_hot_labels = tf.concat([pitch_one_hot_labels, quality_labels], axis=1)
 
     return one_hot_labels
   

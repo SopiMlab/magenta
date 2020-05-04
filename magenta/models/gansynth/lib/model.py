@@ -372,11 +372,16 @@ class Model(object):
 
     # (label_ph, noise_ph) -> fake_wave_ph
     labels_ph = tf.placeholder(tf.int32, [batch_size])
+    num_extra_labels = data_helper.get_extra_labels_count()
+    extra_labels_ph = tf.placeholder(tf.int32, [batch_size, num_extra_labels])
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
-    num_extra_labels = data_helper.get_extra_labels_count()
-    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches + num_extra_labels)
+    one_hot_labels_ph = tf.concat(
+      [tf.one_hot(tf.reshape(labels_ph, (-1, 1)), num_pitches), extra_labels_ph],
+      axis=1
+    )
+
     with load_scope:
       fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
@@ -414,6 +419,7 @@ class Model(object):
     self.pitch_counts = pitch_counts
     self.pitch_to_label_dict = pitch_to_label_dict
     self.labels_ph = labels_ph
+    self.extra_labels_ph = extra_labels_ph
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
     self.saver = tf.train.Saver()
@@ -527,18 +533,17 @@ class Model(object):
     if extra_labelses != None:
       assert len(extra_labelses) == len(z)
       assert all((len(extra_labels) == len(extra_labelses[0]) for extra_labels in extra_labelses[1:]))
-    
-    labelses = [[label] for label in self._pitches_to_labels(pitches)]
-    if extra_labelses:
-      labelses = [labels + extra_labels for labels, extra_labels in zip(labelses, extra_labelses)]
-    n_samples = len(labelses)
-    n_labels = len(labelses[0])
+
+    labels = self._pitches_to_labels(pitches)
+    n_samples = len(labels)
     num_batches = int(np.ceil(float(n_samples) / self.batch_size))
     n_tot = num_batches * self.batch_size
     padding = n_tot - n_samples
     # Pads zeros to make batches even batch size.
+    labels = labels + [0] * padding
+    n_extra_labels = len(extra_labelses[0])
     for i in range(padding):
-      labelses.append([0] * n_labels)
+      extra_labels.append([0] * n_extra_labels)
     z = np.concatenate([z, np.zeros([padding, z.shape[1]])], axis=0)
 
     # Generate waves
@@ -551,7 +556,8 @@ class Model(object):
       waves = self.sess.run(
         self.fake_waves_ph,
         feed_dict = {
-          self.labels_ph: [label for labels in labelses[start:end] for label in labels],
+          self.labels_ph: labels[start:end],
+          self.extra_labels_ph: extra_labelses[start:end],
           self.noises_ph: z[start:end]
         }
       )
