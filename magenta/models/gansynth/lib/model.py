@@ -379,7 +379,7 @@ class Model(object):
     num_pitches = len(pitch_counts)
     one_hot_labels_ph = tf.concat(
       [
-        tf.one_hot(tf.reshape(labels_ph, (-1, 1)), num_pitches),
+        tf.one_hot(labels_ph, num_pitches),
         tf.cast(extra_labels_ph, tf.float32)
       ],
       axis=1
