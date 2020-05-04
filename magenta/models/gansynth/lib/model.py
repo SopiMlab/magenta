@@ -378,7 +378,10 @@ class Model(object):
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
     one_hot_labels_ph = tf.concat(
-      [tf.one_hot(tf.reshape(labels_ph, (-1, 1)), num_pitches), extra_labels_ph],
+      [
+        tf.one_hot(tf.reshape(labels_ph, (-1, 1)), num_pitches),
+        tf.cast(extra_labels_ph, tf.float32)
+      ],
       axis=1
     )
 
