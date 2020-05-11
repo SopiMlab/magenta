@@ -18,7 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from collections import OrderedDict
+import collections
 import json
 import os
 from magenta.models.gansynth.lib import spectral_ops
@@ -232,7 +232,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
   def __init__(self, config):
     super(NSynthQualitiesTFRecordDataset, self).__init__(config)
     
-    self.conditions = OrderedDict([
+    self.conditions = collections.OrderedDict([
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
         get_placeholder = lambda batch_size: tf.placeholder(tf.int32, [batch_size, qualities_count]),
