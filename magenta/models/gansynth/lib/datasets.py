@@ -232,11 +232,13 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
   def __init__(self, config):
     super(NSynthQualitiesTFRecordDataset, self).__init__(config)
 
+    qualities_count = self.get_qualities_count()
+    
     self.conditions = collections.OrderedDict([
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
         get_placeholder = lambda batch_size: tf.placeholder(tf.int32, [batch_size, qualities_count]),
-        provide_labels = lambda batch_size: tf.random.uniform([batch_size, self.get_qualities_count()], dtype=tf.float32),
+        provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
         compute_error = lambda labels, logits: tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits),
         convert_input = lambda x: x
       ))
