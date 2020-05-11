@@ -237,7 +237,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     self.conditions = collections.OrderedDict([
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
-        get_placeholder = lambda batch_size: tf.placeholder(tf.int32, [batch_size, qualities_count]),
+        get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, qualities_count]),
         provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
         #compute_error = lambda labels, logits: tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits),
         compute_error = lambda labels, logits: tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits),
