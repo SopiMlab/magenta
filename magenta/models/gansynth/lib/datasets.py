@@ -288,7 +288,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     # Filter just specified pitches
     dataset = dataset.filter(lambda w, l, cl, p, s: tf.greater_equal(p, self._min_pitch)[0])
     dataset = dataset.filter(lambda w, l, cl, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, cl, p, s: (w, l))
+    dataset = dataset.map(lambda w, l, cl, p, s: (w, l, cl))
     return dataset
 
   def provide_one_hot_labels(self, batch_size):
