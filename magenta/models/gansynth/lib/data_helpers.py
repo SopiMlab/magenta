@@ -99,10 +99,10 @@ class DataSTFTHelper(DataHelper):
         mel_downscale=1,
         ifreq=True)
 
-  def _map_fn(self, wave, one_hot_label):
+  def _map_fn(self, wave, one_hot_label, condition_labels):
     waves = wave[tf.newaxis, :, :]
     data = self.waves_to_data(waves)
-    return data[0], one_hot_label
+    return data[0], one_hot_label, condition_labels
 
   def data_to_waves(self, data):
     return self.specgrams_helper.specgrams_to_waves(data)

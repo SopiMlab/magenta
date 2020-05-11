@@ -279,7 +279,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
             
       return SimpleNamespace(
         wave = wave,
-        one_hot_label = one_hot_label,
+        one_hot_label = pitch_one_hot_label,
         condition_labels = condition_labels,
         pitch = label,
         instrument_source = example['instrument_source']
