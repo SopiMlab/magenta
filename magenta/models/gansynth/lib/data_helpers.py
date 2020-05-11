@@ -80,7 +80,7 @@ class DataHelper(object):
         data.set_shape([batch_size, None, None, None])
         one_hot_labels.set_shape([batch_size, None])
         for condition_label in condition_labels.values():
-          c_label.set_shape([batch_size, None])
+          condition_label.set_shape([batch_size, None])
           
         return data, one_hot_labels, condition_labels
 
