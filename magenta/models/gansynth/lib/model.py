@@ -393,7 +393,7 @@ class Model(object):
     one_hot_labels_ph = tf.concat(
       [
         tf.one_hot(labels_ph, num_pitches),
-        *condition_phs.values()
+        *real_condition_labels.values()
       ],
       axis=1
     )
