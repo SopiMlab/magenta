@@ -276,7 +276,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
       quality_labels = tf.cast(example['qualities'], tf.float32)
       condition_labels = collections.OrderedDict([("qualities", quality_labels)])
 
-      return wave, one_hot_label, condition_labels, label, example['instrument_source']
+      return wave, pitch_one_hot_label, condition_labels, label, example['instrument_source']
 
     dataset = self._get_dataset_from_path()
     dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
