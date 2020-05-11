@@ -75,10 +75,7 @@ def discriminator_fn_specgram(images, conditions, **kwargs):
   with tf.variable_scope('discriminator_cond'):
     x = contrib_layers.flatten(end_points['last_conv'])
     end_points['classification_logits'] = layers.custom_dense(
-        x=x, units=kwargs['num_tokens'], scope='classification_logits')
-    
-    end_points['pitch_classification_logits'] = layers.custom_dense(
-        x=x, units=kwargs['pitch_num_tokens'], scope='pitch_classification_logits')
+        x=x, units=kwargs['num_tokens'], scope='classification_logits')    
     for k, c in conditions.items():
       name = "{}_classification_logits".format(k)
       end_points[name] = layers.custom_dense(x=x, units=c.get_num_tokens(), scope=name)

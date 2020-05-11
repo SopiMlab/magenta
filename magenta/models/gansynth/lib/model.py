@@ -266,7 +266,7 @@ class Model(object):
         generator_fn=lambda inputs: g_fn(inputs)[0],
         discriminator_fn=lambda images, unused_cond: d_fn(images)[0],
         real_data=real_images,
-        generator_inputs=(noises, gen_one_hot_labels, *gen_condition_labels.values()))
+        generator_inputs=(noises, gen_one_hot_labels, *gen_condition_labels))
 
     ########## Define loss.
     gan_loss = train_util.define_loss(gan_model, **config)
@@ -277,7 +277,7 @@ class Model(object):
         _, end_points = d_fn(images)
       pitch_error = tf.nn.softmax_cross_entropy_with_logits_v2(
         labels=tf.stop_gradient(target_one_hot_labels),
-        logits=end_points['pitch_classification_logits'])
+        logits=end_points['classification_logits'])
       condition_errors = [c.compute_error(condition_labels[k], end_points["{}_classification_logits".format(k)]) for k, c in conditions.items()]
       return tf.reduce_mean(pitch_error + sum(condition_errors))
 
