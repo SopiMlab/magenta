@@ -53,8 +53,8 @@ class DataHelper(object):
     """Returns a dictionary {pitch value (int): count (int)}."""
     return self.dataset.get_pitch_counts()
 
-  def get_extra_labels_count(self):
-    return self.dataset.get_extra_labels_count()
+  def get_conditions(self):
+    return self.dataset.get_conditions()
   
   def provide_one_hot_labels(self, batch_size):
     """Returns a batch of one-hot labels."""

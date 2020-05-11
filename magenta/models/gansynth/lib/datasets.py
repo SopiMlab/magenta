@@ -49,9 +49,9 @@ class BaseDataset(object):
     """Returns a dictionary {pitch value (int): count (int)}."""
     raise NotImplementedError
 
-  def get_extra_labels_count(self):
+  def get_conditions(self):
     raise NotImplementedError
-  
+
   def get_pitches(self, num_samples):
     """Returns pitch_counter for num_samples for given dataset."""
     all_pitches = []
@@ -217,10 +217,31 @@ class NSynthTFRecordDataset(BaseDataset):
       }
     return pitch_counts
 
-  def get_extra_labels_count(self):
-    return 0
+  def get_conditions():
+    return ()
+
+ConditionDef = collections.namedtuple("ConditionDef", [
+  "get_num_tokens",
+  "get_placeholder",
+  "provide_labels",
+  "compute_error",
+  "convert_input"
+])
 
 class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthQualitiesTFRecordDataset, self).__init__(config)
+    
+    self.conditions = collections.OrderedDict([
+      ("qualities", ConditionDef(
+        get_num_tokens = self.get_qualities_count,
+        get_placeholder = lambda batch_size: tf.placeholder(tf.int32, [batch_size, qualities_count]),
+        provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
+        compute_error = lambda labels, logits: tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits),
+        convert_input = lambda x: x
+      ))
+    ])
+  
   def provide_dataset(self):
     """Provides dataset (audio, labels) of nsynth."""
     length = 64000
@@ -288,8 +309,8 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
   def get_qualities_count(self):
     return 10 # TODO: don't hardcode
   
-  def get_extra_labels_count(self):
-    return self.get_qualities_count()
+  def get_conditions(self):
+    return self.conditions
 
 registry = {
     'nsynth_tfrecord': NSynthTFRecordDataset,

@@ -18,6 +18,7 @@
 Exposes external API for generating samples and evaluation.
 """
 
+import collections
 import json
 import os
 import time
@@ -195,11 +196,15 @@ class Model(object):
     """
     data_helper = data_helpers.registry[config['data_type']](config)
     real_images, real_one_hot_labels = data_helper.provide_data(batch_size)
+    conditions = data_helper.get_conditions()
 
     # gen_one_hot_labels = real_one_hot_labels
     gen_one_hot_labels = data_helper.provide_one_hot_labels(batch_size)
     num_tokens = real_one_hot_labels.shape[1].value
 
+    gen_condition_labels = OrderedDictionary(((k, c.provide_labels(batch_size)) for k, c in conditions.items()))
+    real_condition_labels = OrderedDictionary(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
+    
     current_image_id = tf.train.get_or_create_global_step()
     current_image_id_inc_op = current_image_id.assign_add(batch_size)
     tf.summary.scalar('current_image_id', current_image_id)
@@ -254,26 +259,27 @@ class Model(object):
 
     # Get network functions and wrap with hparams
     g_fn = lambda x: net_fns.g_fn_registry[config['g_fn']](x, **config)
-    d_fn = lambda x: net_fns.d_fn_registry[config['d_fn']](x, **config)
+    d_fn = lambda x: net_fns.d_fn_registry[config['d_fn']](x, conditions, **config)
 
     # Extra lambda functions to conform to tfgan.gan_model interface
     gan_model = tfgan.gan_model(
         generator_fn=lambda inputs: g_fn(inputs)[0],
         discriminator_fn=lambda images, unused_cond: d_fn(images)[0],
         real_data=real_images,
-        generator_inputs=(noises, gen_one_hot_labels))
+        generator_inputs=(noises, gen_one_hot_labels, gen_condition_labels))
 
     ########## Define loss.
     gan_loss = train_util.define_loss(gan_model, **config)
 
     ########## Auxiliary loss functions
-    def _compute_ac_loss(images, target_one_hot_labels):
+    def _compute_ac_loss(images, target_one_hot_labels, condition_labels):
       with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
         _, end_points = d_fn(images)
-      return tf.reduce_mean(
-          tf.nn.softmax_cross_entropy_with_logits_v2(
-              labels=tf.stop_gradient(target_one_hot_labels),
-              logits=end_points['classification_logits']))
+      pitch_error = tf.nn.softmax_cross_entropy_with_logits_v2(
+        labels=tf.stop_gradient(target_one_hot_labels),
+        logits=end_points['pitch_classification_logits'])
+      condition_errors = [c.compute_error(condition_labels[k], end_points["{}_classification_logits".format(k)]) for k, c in conditions.items()]
+      return tf.reduce_mean(pitch_error + sum(condition_errors))
 
     def _compute_gl_consistency_loss(data):
       """G&L consistency loss."""
@@ -304,9 +310,16 @@ class Model(object):
       gen_gl_consistency_loss_weight = config['gen_gl_consistency_loss_weight']
 
       # AC losses.
-      fake_ac_loss = _compute_ac_loss(gan_model.generated_data,
-                                      gen_one_hot_labels)
-      real_ac_loss = _compute_ac_loss(gan_model.real_data, real_one_hot_labels)
+      fake_ac_loss = _compute_ac_loss(
+        gan_model.generated_data,
+        gen_one_hot_labels,
+        gen_condition_labels
+      )
+      real_ac_loss = _compute_ac_loss(
+        gan_model.real_data,
+        real_one_hot_labels,
+        real_condition_labels
+      )
 
       # GL losses.
       is_fourier = isinstance(data_helper, (data_helpers.DataSTFTHelper,
@@ -372,15 +385,15 @@ class Model(object):
 
     # (label_ph, noise_ph) -> fake_wave_ph
     labels_ph = tf.placeholder(tf.int32, [batch_size])
-    num_extra_labels = data_helper.get_extra_labels_count()
-    extra_labels_ph = tf.placeholder(tf.int32, [batch_size, num_extra_labels])
+
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
+    
     one_hot_labels_ph = tf.concat(
       [
         tf.one_hot(labels_ph, num_pitches),
-        tf.cast(extra_labels_ph, tf.float32)
+        *condition_phs.values()
       ],
       axis=1
     )
@@ -418,11 +431,12 @@ class Model(object):
     self.generator_vars_to_restore = generator_vars_to_restore
     self.real_images = real_images
     self.real_one_hot_labels = real_one_hot_labels
+    self.conditions = conditions
     self.load_scope = load_scope
     self.pitch_counts = pitch_counts
     self.pitch_to_label_dict = pitch_to_label_dict
     self.labels_ph = labels_ph
-    self.extra_labels_ph = extra_labels_ph
+    self.condition_phs = real_condition_labels
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
     self.saver = tf.train.Saver()

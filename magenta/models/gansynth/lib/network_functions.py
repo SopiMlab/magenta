@@ -58,7 +58,7 @@ def generator_fn_specgram(inputs, **kwargs):
   return fake_images, end_points
 
 
-def discriminator_fn_specgram(images, **kwargs):
+def discriminator_fn_specgram(images, conditions, **kwargs):
   """Builds discriminator network."""
   shape = images.shape
   normalizer = data_normalizer.registry[kwargs['data_normalizer']](kwargs)
@@ -76,6 +76,13 @@ def discriminator_fn_specgram(images, **kwargs):
     x = contrib_layers.flatten(end_points['last_conv'])
     end_points['classification_logits'] = layers.custom_dense(
         x=x, units=kwargs['num_tokens'], scope='classification_logits')
+    
+    end_points['pitch_classification_logits'] = layers.custom_dense(
+        x=x, units=kwargs['pitch_num_tokens'], scope='pitch_classification_logits')
+    for k, c in conditions.items():
+      name = "{}_classification_logits".format(k)
+      end_points[name] = layers.custom_dense(x=x, units=c.get_num_tokens(), scope=name)
+    
   return logits, end_points
 
 
