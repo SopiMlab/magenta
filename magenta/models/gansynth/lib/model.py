@@ -18,7 +18,7 @@
 Exposes external API for generating samples and evaluation.
 """
 
-import collections
+from collections import OrderedDict
 import json
 import os
 import time
@@ -202,8 +202,8 @@ class Model(object):
     gen_one_hot_labels = data_helper.provide_one_hot_labels(batch_size)
     num_tokens = real_one_hot_labels.shape[1].value
 
-    gen_condition_labels = OrderedDictionary(((k, c.provide_labels(batch_size)) for k, c in conditions.items()))
-    real_condition_labels = OrderedDictionary(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
+    gen_condition_labels = OrderedDict(((k, c.provide_labels(batch_size)) for k, c in conditions.items()))
+    real_condition_labels = OrderedDict(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
     
     current_image_id = tf.train.get_or_create_global_step()
     current_image_id_inc_op = current_image_id.assign_add(batch_size)
