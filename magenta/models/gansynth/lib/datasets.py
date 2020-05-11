@@ -239,7 +239,6 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
         get_num_tokens = self.get_qualities_count,
         get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, qualities_count]),
         provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
-        #compute_error = lambda labels, logits: tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits),
         compute_error = lambda labels, logits: tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits),
         convert_input = lambda x: x
       ))
@@ -298,13 +297,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     counts = [pitch_counts[p] for p in pitches]
     indices = tf.reshape(
         tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    pitch_one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-
-    qualities_count = self.get_qualities_count()
-    
-    quality_labels = tf.random.uniform([batch_size, qualities_count], minval=0, maxval=1, dtype=tf.int64)
-
-    one_hot_labels = tf.concat([pitch_one_hot_labels, tf.cast(quality_labels, tf.float32)], axis=1)
+    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
 
     return one_hot_labels
   
