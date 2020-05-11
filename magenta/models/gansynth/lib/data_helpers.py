@@ -76,10 +76,13 @@ class DataHelper(object):
         tf.add_to_collection(tf.GraphKeys.TABLE_INITIALIZERS,
                              iterator.initializer)
 
-        data, one_hot_labels = iterator.get_next()
+        data, one_hot_labels, condition_labels = iterator.get_next()
         data.set_shape([batch_size, None, None, None])
         one_hot_labels.set_shape([batch_size, None])
-        return data, one_hot_labels
+        for condition_label in condition_labels.values():
+          c_label.set_shape([batch_size, None])
+          
+        return data, one_hot_labels, condition_labels
 
 
 class DataSTFTHelper(DataHelper):

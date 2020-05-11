@@ -27,6 +27,7 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 from tensorflow.contrib import data as contrib_data
 from tensorflow.contrib import lookup as contrib_lookup
+from types import SimpleNamespace
 
 Counter = collections.Counter
 
@@ -273,11 +274,16 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
       pitch_one_hot_label = tf.one_hot(
           label_index_table.lookup(label), depth=len(pitches))[0]
       
-      quality_labels = example['qualities']
-      
-      one_hot_label = tf.concat([pitch_one_hot_label, tf.cast(quality_labels, tf.float32)], axis=0)
-      
-      return wave, one_hot_label, label, example['instrument_source']
+      quality_labels = tf.cast(example['qualities'], tf.float32)
+      condition_labels = collections.OrderedDict([("qualities", quality_labels)])
+            
+      return SimpleNamespace(
+        wave = wave,
+        one_hot_label = one_hot_label,
+        condition_labels = condition_labels,
+        pitch = label,
+        instrument_source = example['instrument_source']
+      )
 
     dataset = self._get_dataset_from_path()
     dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
@@ -285,11 +291,10 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     # Filter just specified instrument sources
     def _is_wanted_source(s):
       return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
-    dataset = dataset.filter(lambda w, l, p, s: _is_wanted_source(s))
-    # Filter just specified pitches
-    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, self._min_pitch)[0])
-    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, p, s: (w, l))
+    dataset = dataset.filter(lambda x: _is_wanted_source(x.instrument_source))    # Filter just specified pitches
+    dataset = dataset.filter(lambda x: tf.greater_equal(x.pitch, self._min_pitch)[0])
+    dataset = dataset.filter(lambda x: tf.less_equal(x.pitch, self._max_pitch)[0])
+    dataset = dataset.map(lambda x: (x.wave, x.one_hot_label, x.condition_labels))
     return dataset
 
   def provide_one_hot_labels(self, batch_size):

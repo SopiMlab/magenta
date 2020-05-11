@@ -195,7 +195,7 @@ class Model(object):
       config: (dict) All the global state.
     """
     data_helper = data_helpers.registry[config['data_type']](config)
-    real_images, real_one_hot_labels = data_helper.provide_data(batch_size)
+    real_images, real_one_hot_labels, real_condition_labels = data_helper.provide_data(batch_size)
     conditions = data_helper.get_conditions()
 
     # gen_one_hot_labels = real_one_hot_labels
@@ -203,7 +203,6 @@ class Model(object):
     num_tokens = real_one_hot_labels.shape[1].value
 
     gen_condition_labels = OrderedDict(((k, c.provide_labels(batch_size)) for k, c in conditions.items()))
-    real_condition_labels = OrderedDict(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
     
     current_image_id = tf.train.get_or_create_global_step()
     current_image_id_inc_op = current_image_id.assign_add(batch_size)
@@ -385,21 +384,15 @@ class Model(object):
 
     # (label_ph, noise_ph) -> fake_wave_ph
     labels_ph = tf.placeholder(tf.int32, [batch_size])
-
+    condition_label_phs = OrderedDict(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
     
-    one_hot_labels_ph = tf.concat(
-      [
-        tf.one_hot(labels_ph, num_pitches),
-        *real_condition_labels.values()
-      ],
-      axis=1
-    )
+    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
 
     with load_scope:
-      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph))
+      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph, condition_label_phs))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
