@@ -266,7 +266,7 @@ class Model(object):
         generator_fn=lambda inputs: g_fn(inputs)[0],
         discriminator_fn=lambda images, unused_cond: d_fn(images)[0],
         real_data=real_images,
-        generator_inputs=(noises, gen_one_hot_labels, *gen_condition_labels))
+        generator_inputs=(noises, gen_one_hot_labels, *gen_condition_labels.values()))
 
     ########## Define loss.
     gan_loss = train_util.define_loss(gan_model, **config)
