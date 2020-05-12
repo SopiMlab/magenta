@@ -278,7 +278,7 @@ class Model(object):
         labels=tf.stop_gradient(target_one_hot_labels),
         logits=end_points['classification_logits'])
       condition_errors = [c.compute_error(condition_labels[k], end_points["{}_classification_logits".format(k)]) for k, c in conditions.items()]
-      return tf.reduce_mean(pitch_error + sum(condition_errors))
+      return tf.reduce_mean(pitch_error) + sum(condition_errors)
 
     def _compute_gl_consistency_loss(data):
       """G&L consistency loss."""
@@ -392,7 +392,7 @@ class Model(object):
     one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
 
     with load_scope:
-      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph, condition_label_phs))
+      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph, *condition_label_phs.values()))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
@@ -465,8 +465,8 @@ class Model(object):
       noises = train_util.make_latent_vectors(fake_batch_size, **config)
       one_hot_labels = util.make_ordered_one_hot_vectors(fake_batch_size,
                                                          num_tokens)
-
-      fake_images = self.gan_model.generator_fn((noises, one_hot_labels))
+      condition_labels = [c.get_summary_labels(fake_batch_size) for c in self.conditions.values()]
+      fake_images = self.gan_model.generator_fn((noises, one_hot_labels, *condition_labels))
       real_images = self.real_images
 
     # Set shapes

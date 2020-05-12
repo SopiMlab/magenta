@@ -223,9 +223,10 @@ class NSynthTFRecordDataset(BaseDataset):
 ConditionDef = collections.namedtuple("ConditionDef", [
   "get_num_tokens",
   "get_placeholder",
+  "get_summary_labels",
   "provide_labels",
   "compute_error",
-  "convert_input"
+  "convert_input",
 ])
 
 class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
@@ -238,8 +239,11 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
         get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, qualities_count]),
+        # TODO: this is used in Model.add_summaries() and needs to return something that makes shapes match, but what is its actual function?
+        # qualities are not one-hot, but does it matter here?
+        get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, qualities_count),
         provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
-        compute_error = lambda labels, logits: tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits),
+        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits)),
         convert_input = lambda x: x
       ))
     ])
