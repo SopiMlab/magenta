@@ -240,7 +240,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     with open(self._train_meta_path, "r") as meta_fp:
         meta = json.load(meta_fp)
 
-    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), meta, [0]*qualities_count)
+    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), meta.values(), [0]*qualities_count)
     n_examples = len(meta)
     qualities_logits = list(map(lambda p: [1.0-p, p], map(lambda qc: qc/n_examples, quality_counts)))
     
