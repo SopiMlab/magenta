@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+from functools import reduce
 import json
 import os
 from magenta.models.gansynth.lib import spectral_ops
@@ -233,9 +234,16 @@ ConditionDef = collections.namedtuple("ConditionDef", [
 class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
   def __init__(self, config):
     super(NSynthQualitiesTFRecordDataset, self).__init__(config)
-
+    
     qualities_count = self.get_qualities_count()
 
+    with open(self._train_meta_path, "r") as meta_fp:
+        meta = json.load(meta_fp)
+
+    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), meta, [0]*qualities_count)
+    n_examples = len(meta)
+    qualities_logits = list(map(lambda p: [1.0-p, p], map(lambda qc: qc/n_examples, quality_counts)))
+    
     self.conditions = collections.OrderedDict([
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
@@ -243,7 +251,8 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
         # TODO: this is used in Model.add_summaries() and needs to return something that makes shapes match, but what is its actual function?
         # qualities are not one-hot, but does it matter here?
         get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, qualities_count),
-        provide_labels = lambda batch_size: tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
+        provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(qualities_logits), batch_size)), tf.float32),
+        #tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
         compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits)),
         convert_input = lambda x: x
       ))
