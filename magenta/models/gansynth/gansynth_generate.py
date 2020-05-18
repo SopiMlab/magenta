@@ -25,6 +25,7 @@ latent vectors in time. If no MIDI file is given, a random batch of notes is
 synthesized.
 """
 
+import json
 import os
 
 import absl.flags
@@ -32,6 +33,7 @@ from magenta.models.gansynth.lib import flags as lib_flags
 from magenta.models.gansynth.lib import generate_util as gu
 from magenta.models.gansynth.lib import model as lib_model
 from magenta.models.gansynth.lib import util
+import numpy as np
 import tensorflow.compat.v1 as tf
 
 
@@ -53,6 +55,11 @@ absl.flags.DEFINE_integer('batch_size', 8, 'Batch size for generation.')
 absl.flags.DEFINE_float('secs_per_instrument', 6.0,
                         'In random interpolations, the seconds it takes to '
                         'interpolate from one instrument to another.')
+absl.flags.DEFINE_integer('pitch', None, 'Note pitch.')
+absl.flags.DEFINE_integer('seed', None, 'Numpy random seed.')
+absl.flags.DEFINE_string('condition_labels',
+                         '',
+                         'Condition labels dictionary.')
 
 FLAGS = absl.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -68,11 +75,16 @@ def main(unused_argv):
   })
   model = lib_model.Model.load_from_path(FLAGS.ckpt_dir, flags)
 
+  condition_labels = json.loads(FLAGS.condition_labels) if FLAGS.condition_labels else {}
+  
   # Make an output directory if it doesn't exist
   output_dir = util.expand_path(FLAGS.output_dir)
   if not tf.gfile.Exists(output_dir):
     tf.gfile.MakeDirs(output_dir)
 
+  if FLAGS.seed != None:
+    np.random.seed(seed=FLAGS.seed)
+    
   if FLAGS.midi_file:
     # If a MIDI file is provided, synthesize interpolations across the clip
     unused_ns, notes = gu.load_midi(FLAGS.midi_file)
@@ -88,7 +100,7 @@ def main(unused_argv):
 
     # Generate audio for each note
     print('Generating {} samples...'.format(len(z_notes)))
-    audio_notes = model.generate_samples_from_z(z_notes, notes['pitches'])
+    audio_notes = model.generate_samples_from_z(z_notes, notes['pitches'], [condition_labels]*len(z_notes))
 
     # Make a single audio clip
     audio_clip = gu.combine_notes(audio_notes,
@@ -101,7 +113,7 @@ def main(unused_argv):
     gu.save_wav(audio_clip, fname)
   else:
     # Otherwise, just generate a batch of random sounds
-    waves = model.generate_samples(FLAGS.batch_size)
+    waves = model.generate_samples(FLAGS.batch_size, pitch=FLAGS.pitch, condition_labelses=[condition_labels]*FLAGS.batch_size)
     # Write the wave files
     for i in range(len(waves)):
       fname = os.path.join(output_dir, 'generated_{}.wav'.format(i))

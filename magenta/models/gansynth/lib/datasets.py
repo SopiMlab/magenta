@@ -24,6 +24,7 @@ import os
 from magenta.models.gansynth.lib import spectral_ops
 from magenta.models.gansynth.lib import util
 import numpy as np
+import re
 import tensorflow.compat.v1 as tf
 from tensorflow.contrib import data as contrib_data
 from tensorflow.contrib import lookup as contrib_lookup
@@ -137,7 +138,7 @@ class NSynthTFRecordDataset(BaseDataset):
     # Filter just specified pitches
     dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, self._min_pitch)[0])
     dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, p, s: (w, l))
+    dataset = dataset.map(lambda w, l, p, s: (w, l, {}))
     return dataset
   
   def get_pitch_counts(self):
@@ -217,8 +218,8 @@ class NSynthTFRecordDataset(BaseDataset):
       }
     return pitch_counts
 
-  def get_conditions():
-    return ()
+  def get_conditions(self):
+    return {}
 
 ConditionDef = collections.namedtuple("ConditionDef", [
   "get_num_tokens",
@@ -234,7 +235,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     super(NSynthQualitiesTFRecordDataset, self).__init__(config)
 
     qualities_count = self.get_qualities_count()
-    
+
     self.conditions = collections.OrderedDict([
       ("qualities", ConditionDef(
         get_num_tokens = self.get_qualities_count,
