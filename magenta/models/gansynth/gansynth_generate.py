@@ -42,9 +42,6 @@ absl.flags.DEFINE_string('ckpt_dir',
                          'Path to the base directory of pretrained checkpoints.'
                          'The base directory should contain many '
                          '"stage_000*" subdirectories.')
-absl.flags.DEFINE_string('dataset_name',
-                         'nsynth_tfrecord',
-                         'Name of dataset to use.')
 absl.flags.DEFINE_string('output_dir',
                          '/tmp/gansynth/samples',
                          'Path to directory to save wave files.')
@@ -70,8 +67,7 @@ def main(unused_argv):
 
   # Load the model
   flags = lib_flags.Flags({
-    'batch_size_schedule': [FLAGS.batch_size],
-    'dataset_name': FLAGS.dataset_name
+    'batch_size_schedule': [FLAGS.batch_size]
   })
   model = lib_model.Model.load_from_path(FLAGS.ckpt_dir, flags)
 

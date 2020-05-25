@@ -228,8 +228,7 @@ ConditionDef = collections.namedtuple("ConditionDef", [
   "get_placeholder",
   "get_summary_labels",
   "provide_labels",
-  "compute_error",
-  "convert_input",
+  "compute_error"
 ])
 
 class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
@@ -253,9 +252,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
         # qualities are not one-hot, but does it matter here?
         get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, qualities_count),
         provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(qualities_logits), batch_size)), tf.float32),
-        #tf.random.uniform([batch_size, qualities_count], dtype=tf.float32),
-        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits)),
-        convert_input = lambda x: x
+        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits))
       ))
     ])
   
