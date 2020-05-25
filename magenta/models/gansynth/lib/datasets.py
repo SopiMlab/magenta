@@ -64,7 +64,9 @@ class BaseDataset(object):
     pitch_counter = Counter(sample_pitches)
     return pitch_counter
 
-
+  def is_included(self, example):
+    raise NotImplementedError
+  
 class NSynthTFRecordDataset(BaseDataset):
   """A dataset for reading NSynth from a TFRecord file."""
 
@@ -148,8 +150,8 @@ class NSynthTFRecordDataset(BaseDataset):
         meta = json.load(meta_fp)
       pitch_counts = {}
       for name, note in meta.items():
-        pitch = note["pitch"]
-        if self._min_pitch <= pitch <= self._max_pitch and note["instrument_source"] in self._instrument_sources:
+        if self.is_included(note):
+          pitch = note["pitch"]
           if pitch in pitch_counts:
             pitch_counts[pitch] += 1
           else:
@@ -222,6 +224,9 @@ class NSynthTFRecordDataset(BaseDataset):
 
   def get_conditions(self):
     return {}
+  
+  def is_included(self, example):
+    return self._min_pitch <= example["pitch"] <= self._max_pitch and example["instrument_source"] in self._instrument_sources
 
 ConditionDef = collections.namedtuple("ConditionDef", [
   "get_num_tokens",
@@ -238,9 +243,9 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     qualities_count = self.get_qualities_count()
 
     with open(self._train_meta_path, "r") as meta_fp:
-        meta = json.load(meta_fp)
+      meta = json.load(meta_fp)
 
-    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), meta.values(), [0]*qualities_count)
+    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), filter(self.is_included, meta.values()), [0]*qualities_count)
     n_examples = len(meta)
     qualities_logits = list(map(lambda p: [1.0-p, p], map(lambda qc: qc/n_examples, quality_counts)))
     
@@ -314,7 +319,7 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
     return one_hot_labels
   
   def get_qualities_count(self):
-    return 10 # TODO: don't hardcode
+    return 10
   
   def get_conditions(self):
     return self.conditions
