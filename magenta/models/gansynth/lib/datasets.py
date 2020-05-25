@@ -149,10 +149,11 @@ class NSynthTFRecordDataset(BaseDataset):
       pitch_counts = {}
       for name, note in meta.items():
         pitch = note["pitch"]
-        if pitch in pitch_counts:
-          pitch_counts[pitch] += 1
-        else:
-          pitch_counts[pitch] = 1
+        if self._min_pitch <= pitch <= self._max_pitch and note["instrument_source"] in self._instrument_sources:
+          if pitch in pitch_counts:
+            pitch_counts[pitch] += 1
+          else:
+            pitch_counts[pitch] = 1
     else:
       pitch_counts = {
         24: 711,
