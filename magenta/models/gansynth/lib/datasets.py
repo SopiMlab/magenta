@@ -324,7 +324,99 @@ class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
   def get_conditions(self):
     return self.conditions
 
+class NSynthInstrumentFamilyTFRecordDataset(NSynthTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthInstrumentFamilyTFRecordDataset, self).__init__(config)
+    
+    families_count = self.get_families_count()
+
+    with open(self._train_meta_path, "r") as meta_fp:
+      meta = json.load(meta_fp)
+
+    family_counts = [0]*families_count
+    for m in filter(self.is_included, meta.values()):
+      family_counts[m["instrument_family"]] += 1
+
+    n_examples = len(meta)
+
+    families_logits = list(map(lambda p: [1.0-p, p], map(lambda fc: fc/n_examples, family_counts)))
+    
+    self.conditions = collections.OrderedDict([
+      ("instrument_family", ConditionDef(
+        get_num_tokens = self.get_families_count,
+        get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, families_count]),
+        get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, families_count),
+        provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(families_logits), batch_size)), tf.float32),
+        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits))
+      ))
+    ])
+  
+  def provide_dataset(self):
+    """Provides dataset (audio, labels) of nsynth."""
+    length = 64000
+    channels = 1
+
+    pitch_counts = self.get_pitch_counts()
+    pitches = sorted(pitch_counts.keys())
+    label_index_table = contrib_lookup.index_table_from_tensor(
+        sorted(pitches), dtype=tf.int64)
+
+    def _parse_nsynth(record):
+      """Parsing function for NSynth dataset."""
+      features = {
+          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
+          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
+          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
+          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
+          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
+      }
+
+      example = tf.parse_single_example(record, features)
+      wave, label = example['audio'], example['pitch']
+      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
+                                      length,
+                                      channels)[0]
+      pitch_one_hot_label = tf.one_hot(
+          label_index_table.lookup(label), depth=len(pitches))[0]
+
+      family_labels = tf.one_hot(example["instrument_family"], depth=self.get_families_count())[0]
+      condition_labels = collections.OrderedDict([("instrument_family", family_labels)])
+
+      return wave, pitch_one_hot_label, condition_labels, label, example['instrument_source']
+
+    dataset = self._get_dataset_from_path()
+    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
+
+    # Filter just specified instrument sources
+    def _is_wanted_source(s):
+      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
+    dataset = dataset.filter(lambda w, l, cl, p, s: _is_wanted_source(s))
+    # Filter just specified pitches
+    dataset = dataset.filter(lambda w, l, cl, p, s: tf.greater_equal(p, self._min_pitch)[0])
+    dataset = dataset.filter(lambda w, l, cl, p, s: tf.less_equal(p, self._max_pitch)[0])
+    dataset = dataset.map(lambda w, l, cl, p, s: (w, l, cl))
+    return dataset
+
+  def provide_one_hot_labels(self, batch_size):
+    """Provides one hot labels."""
+    pitch_counts = self.get_pitch_counts()
+    pitches = sorted(pitch_counts.keys())
+    counts = [pitch_counts[p] for p in pitches]
+    indices = tf.reshape(
+        tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
+    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
+
+    return one_hot_labels
+  
+  def get_families_count(self):
+    return 11
+  
+  def get_conditions(self):
+    return self.conditions
+
+  
 registry = {
     'nsynth_tfrecord': NSynthTFRecordDataset,
-    'nsynth_qualities_tfrecord': NSynthQualitiesTFRecordDataset
+    'nsynth_qualities_tfrecord': NSynthQualitiesTFRecordDataset,
+    'nsynth_instrument_family_tfrecord': NSynthInstrumentFamilyTFRecordDataset
 }
