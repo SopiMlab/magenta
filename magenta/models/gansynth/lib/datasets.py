@@ -30,6 +30,8 @@ import tensorflow.compat.v1 as tf
 from tensorflow.contrib import data as contrib_data
 from tensorflow.contrib import lookup as contrib_lookup
 
+from magenta.models.gansynth.lib import conditions
+
 Counter = collections.Counter
 
 
@@ -39,51 +41,96 @@ class BaseDataset(object):
   def __init__(self, config):
     self._train_data_path = util.expand_path(config['train_data_path'])
 
-  def provide_one_hot_labels(self, batch_size):
-    """Provides one-hot labels."""
-    raise NotImplementedError
-
   def provide_dataset(self):
     """Provides audio dataset."""
+    raise NotImplementedError
+
+  def get_conditions(self):
+    raise NotImplementedError
+
+  def is_included(self, example):
     raise NotImplementedError
 
   def get_pitch_counts(self):
     """Returns a dictionary {pitch value (int): count (int)}."""
     raise NotImplementedError
 
-  def get_conditions(self):
-    raise NotImplementedError
+class NSynthGenericConditionsTFRecordDataset(BaseDataset):
+  def __init__(self, config):
+    super(NSynthGenericConditionsTFRecordDataset, self).__init__(config)
 
-  def get_pitches(self, num_samples):
-    """Returns pitch_counter for num_samples for given dataset."""
-    all_pitches = []
-    pitch_counts = self.get_pitch_counts()
-    for k, v in pitch_counts.items():
-      all_pitches.extend([k]*v)
-    sample_pitches = np.random.choice(all_pitches, num_samples)
-    pitch_counter = Counter(sample_pitches)
-    return pitch_counter
+    self._train_meta_path = None
+    if 'train_meta_path' in config and config['train_meta_path']:
+      self._train_meta_path = util.expand_path(config['train_meta_path'])
+    else:
+      magic_meta_path = os.path.join(config['train_root_dir'], 'meta.json')
+      if os.path.exists(magic_meta_path):
+        self._train_meta_path = magic_meta_path
+
+    self._instrument_sources = config['train_instrument_sources']
+    self._min_pitch = config['train_min_pitch']
+    self._max_pitch = config['train_max_pitch']
+
+    self.meta = None
+    with open(self._train_meta_path, "r") as meta_fp:
+      self.meta = json.load(meta_fp)
+      self.meta = {k: v for k, v in self.meta.items() if self.is_included(v)}
+
+  def provide_dataset(self):
+    """Provides dataset (audio, labels) of nsynth."""
+    length = 64000
+    channels = 1
+
+    def _parse_nsynth(record):
+      """Parsing function for NSynth dataset."""
+      required_features = dict(reduce(list.__add__, [c.required_features for c in self.conditions.values()]))
+      features = {
+        'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
+        'audio': tf.FixedLenFeature([length], dtype=tf.float32),
+        'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
+        **required_features
+      }
+
+      example = tf.parse_single_example(record, features)
+      wave, pitch = example['audio'], example['pitch']
+      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
+                                      length,
+                                      channels)[0]
+
+      condition_labels = []
+
+      for k, c in self.conditions.items():
+        value = c.get_label_from_record(example)
+        condition_labels.append((k, value))
+        if c.num_tokens == None:
+          c.num_tokens = c.calculate_num_tokens(value)
+
+      condition_labels = collections.OrderedDict(condition_labels)
+
+      return wave, condition_labels, pitch, example['instrument_source']
+
+    dataset = self._get_dataset_from_path()
+    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
+
+    # Filter just specified instrument sources
+    def _is_wanted_source(s):
+      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
+
+    dataset = dataset.filter(lambda w, cl, p, s: _is_wanted_source(s))
+    # Filter just specified pitches
+    dataset = dataset.filter(lambda w, cl, p, s: tf.greater_equal(p, self._min_pitch)[0])
+    dataset = dataset.filter(lambda w, cl, p, s: tf.less_equal(p, self._max_pitch)[0])
+    dataset = dataset.map(lambda w, cl, p, s: (w, cl))
+    return dataset
+
+    return one_hot_labels
 
   def is_included(self, example):
-    raise NotImplementedError
-  
-class NSynthTFRecordDataset(BaseDataset):
-  """A dataset for reading NSynth from a TFRecord file."""
+    return self._min_pitch <= example["pitch"] <= self._max_pitch and example["instrument_source"] in self._instrument_sources
 
-  def __init__(self, config):
-      super(NSynthTFRecordDataset, self).__init__(config)
-      self._train_meta_path = None
-      if 'train_meta_path' in config and config['train_meta_path']:
-          self._train_meta_path = util.expand_path(config['train_meta_path'])
-      else:
-          magic_meta_path = os.path.join(config['train_root_dir'], 'meta.json')
-          if os.path.exists(magic_meta_path):
-              self._train_meta_path = magic_meta_path
-          
-      self._instrument_sources = config['train_instrument_sources']
-      self._min_pitch = config['train_min_pitch']
-      self._max_pitch = config['train_max_pitch']
-    
+  def get_conditions(self):
+    return self.conditions
+
   def _get_dataset_from_path(self):
     dataset = tf.data.Dataset.list_files(self._train_data_path)
     dataset = dataset.apply(contrib_data.shuffle_and_repeat(buffer_size=1000))
@@ -92,58 +139,7 @@ class NSynthTFRecordDataset(BaseDataset):
             tf.data.TFRecordDataset, cycle_length=20, sloppy=True))
     return dataset
 
-  def provide_one_hot_labels(self, batch_size):
-    """Provides one hot labels."""
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    counts = [pitch_counts[p] for p in pitches]
-    indices = tf.reshape(
-        tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-    return one_hot_labels
-  
-  def provide_dataset(self):
-    """Provides dataset (audio, labels) of nsynth."""
-    length = 64000
-    channels = 1
-
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    label_index_table = contrib_lookup.index_table_from_tensor(
-        sorted(pitches), dtype=tf.int64)
-
-    def _parse_nsynth(record):
-      """Parsing function for NSynth dataset."""
-      features = {
-          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
-          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
-          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
-          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
-          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
-      }
-
-      example = tf.parse_single_example(record, features)
-      wave, label = example['audio'], example['pitch']
-      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
-                                      length,
-                                      channels)[0]
-      one_hot_label = tf.one_hot(
-          label_index_table.lookup(label), depth=len(pitches))[0]
-      return wave, one_hot_label, label, example['instrument_source']
-
-    dataset = self._get_dataset_from_path()
-    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
-
-    # Filter just specified instrument sources
-    def _is_wanted_source(s):
-      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
-    dataset = dataset.filter(lambda w, l, p, s: _is_wanted_source(s))
-    # Filter just specified pitches
-    dataset = dataset.filter(lambda w, l, p, s: tf.greater_equal(p, self._min_pitch)[0])
-    dataset = dataset.filter(lambda w, l, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, p, s: (w, l, {}))
-    return dataset
-  
+  #TODO: This could still be refactored away, only used in model generate methods to choose random pitches.
   def get_pitch_counts(self):
     if self._train_meta_path:
       with open(self._train_meta_path, "r") as meta_fp:
@@ -222,197 +218,34 @@ class NSynthTFRecordDataset(BaseDataset):
       }
     return pitch_counts
 
-  def get_conditions(self):
-    return {}
-  
-  def is_included(self, example):
-    return self._min_pitch <= example["pitch"] <= self._max_pitch and example["instrument_source"] in self._instrument_sources
 
-ConditionDef = collections.namedtuple("ConditionDef", [
-  "get_num_tokens",
-  "get_placeholder",
-  "get_summary_labels",
-  "provide_labels",
-  "compute_error"
-])
+class NSynthTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
+  """A dataset for reading NSynth from a TFRecord file."""
 
-class NSynthQualitiesTFRecordDataset(NSynthTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthTFRecordDataset, self).__init__(config)
+    self.conditions = collections.OrderedDict([
+      conditions.create_pitch_condition(config, self.meta)
+    ])
+
+
+class NSynthQualitiesTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
   def __init__(self, config):
     super(NSynthQualitiesTFRecordDataset, self).__init__(config)
     
-    qualities_count = self.get_qualities_count()
-
-    with open(self._train_meta_path, "r") as meta_fp:
-      meta = json.load(meta_fp)
-
-    quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), filter(self.is_included, meta.values()), [0]*qualities_count)
-    n_examples = len(meta)
-    qualities_logits = list(map(lambda p: [1.0-p, p], map(lambda qc: qc/n_examples, quality_counts)))
-    
     self.conditions = collections.OrderedDict([
-      ("qualities", ConditionDef(
-        get_num_tokens = self.get_qualities_count,
-        get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, qualities_count]),
-        # TODO: this is used in Model.add_summaries() and needs to return something that makes shapes match, but what is its actual function?
-        # qualities are not one-hot, but does it matter here?
-        get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, qualities_count),
-        provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(qualities_logits), batch_size)), tf.float32),
-        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.stop_gradient(labels), logits=logits))
-      ))
+      conditions.create_pitch_condition(config, self.meta),
+      conditions.create_qualities_condition(config, self.meta)
     ])
-  
-  def provide_dataset(self):
-    """Provides dataset (audio, labels) of nsynth."""
-    length = 64000
-    channels = 1
 
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    label_index_table = contrib_lookup.index_table_from_tensor(
-        sorted(pitches), dtype=tf.int64)
-
-    def _parse_nsynth(record):
-      """Parsing function for NSynth dataset."""
-      features = {
-          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
-          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
-          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
-          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
-          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
-      }
-
-      example = tf.parse_single_example(record, features)
-      wave, label = example['audio'], example['pitch']
-      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
-                                      length,
-                                      channels)[0]
-      pitch_one_hot_label = tf.one_hot(
-          label_index_table.lookup(label), depth=len(pitches))[0]
-      
-      quality_labels = tf.cast(example['qualities'], tf.float32)
-      condition_labels = collections.OrderedDict([("qualities", quality_labels)])
-
-      return wave, pitch_one_hot_label, condition_labels, label, example['instrument_source']
-
-    dataset = self._get_dataset_from_path()
-    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
-
-    # Filter just specified instrument sources
-    def _is_wanted_source(s):
-      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
-    dataset = dataset.filter(lambda w, l, cl, p, s: _is_wanted_source(s))
-    # Filter just specified pitches
-    dataset = dataset.filter(lambda w, l, cl, p, s: tf.greater_equal(p, self._min_pitch)[0])
-    dataset = dataset.filter(lambda w, l, cl, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, cl, p, s: (w, l, cl))
-    return dataset
-
-  def provide_one_hot_labels(self, batch_size):
-    """Provides one hot labels."""
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    counts = [pitch_counts[p] for p in pitches]
-    indices = tf.reshape(
-        tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-
-    return one_hot_labels
-  
-  def get_qualities_count(self):
-    return 10
-  
-  def get_conditions(self):
-    return self.conditions
-
-class NSynthInstrumentFamilyTFRecordDataset(NSynthTFRecordDataset):
+class NSynthInstrumentFamilyTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
   def __init__(self, config):
     super(NSynthInstrumentFamilyTFRecordDataset, self).__init__(config)
     
-    families_count = self.get_families_count()
-
-    with open(self._train_meta_path, "r") as meta_fp:
-      meta = json.load(meta_fp)
-
-    family_counts = [0]*families_count
-    for m in filter(self.is_included, meta.values()):
-      family_counts[m["instrument_family"]] += 1
-
-    n_examples = len(meta)
-
-    families_logits = list(map(lambda p: [1.0-p, p], map(lambda fc: fc/n_examples, family_counts)))
-    
     self.conditions = collections.OrderedDict([
-      ("instrument_family", ConditionDef(
-        get_num_tokens = self.get_families_count,
-        get_placeholder = lambda batch_size: tf.placeholder(tf.float32, [batch_size, families_count]),
-        get_summary_labels = lambda batch_size: util.make_ordered_one_hot_vectors(batch_size, families_count),
-        provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(families_logits), batch_size)), tf.float32),
-        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits))
-      ))
+      conditions.create_pitch_condition(config, self.meta),
+      conditions.create_instrument_family_condition(config, self.meta)
     ])
-  
-  def provide_dataset(self):
-    """Provides dataset (audio, labels) of nsynth."""
-    length = 64000
-    channels = 1
-
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    label_index_table = contrib_lookup.index_table_from_tensor(
-        sorted(pitches), dtype=tf.int64)
-
-    def _parse_nsynth(record):
-      """Parsing function for NSynth dataset."""
-      features = {
-          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
-          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
-          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
-          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
-          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
-      }
-
-      example = tf.parse_single_example(record, features)
-      wave, label = example['audio'], example['pitch']
-      wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
-                                      length,
-                                      channels)[0]
-      pitch_one_hot_label = tf.one_hot(
-          label_index_table.lookup(label), depth=len(pitches))[0]
-
-      family_labels = tf.one_hot(example["instrument_family"], depth=self.get_families_count())[0]
-      condition_labels = collections.OrderedDict([("instrument_family", family_labels)])
-
-      return wave, pitch_one_hot_label, condition_labels, label, example['instrument_source']
-
-    dataset = self._get_dataset_from_path()
-    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
-
-    # Filter just specified instrument sources
-    def _is_wanted_source(s):
-      return tf.reduce_any(list(map(lambda q: tf.equal(s, q)[0], self._instrument_sources)))
-    dataset = dataset.filter(lambda w, l, cl, p, s: _is_wanted_source(s))
-    # Filter just specified pitches
-    dataset = dataset.filter(lambda w, l, cl, p, s: tf.greater_equal(p, self._min_pitch)[0])
-    dataset = dataset.filter(lambda w, l, cl, p, s: tf.less_equal(p, self._max_pitch)[0])
-    dataset = dataset.map(lambda w, l, cl, p, s: (w, l, cl))
-    return dataset
-
-  def provide_one_hot_labels(self, batch_size):
-    """Provides one hot labels."""
-    pitch_counts = self.get_pitch_counts()
-    pitches = sorted(pitch_counts.keys())
-    counts = [pitch_counts[p] for p in pitches]
-    indices = tf.reshape(
-        tf.multinomial(tf.log([tf.to_float(counts)]), batch_size), [batch_size])
-    one_hot_labels = tf.one_hot(indices, depth=len(pitches))
-
-    return one_hot_labels
-  
-  def get_families_count(self):
-    return 11
-  
-  def get_conditions(self):
-    return self.conditions
 
   
 registry = {

@@ -195,12 +195,10 @@ class Model(object):
       config: (dict) All the global state.
     """
     data_helper = data_helpers.registry[config['data_type']](config)
-    real_images, real_one_hot_labels, real_condition_labels = data_helper.provide_data(batch_size)
+    real_images, real_condition_labels = data_helper.provide_data(batch_size)
     conditions = data_helper.get_conditions()
 
     # gen_one_hot_labels = real_one_hot_labels
-    gen_one_hot_labels = data_helper.provide_one_hot_labels(batch_size)
-    num_tokens = real_one_hot_labels.shape[1].value
 
     gen_condition_labels = OrderedDict(((k, c.provide_labels(batch_size)) for k, c in conditions.items()))
     
@@ -247,7 +245,6 @@ class Model(object):
     config['num_blocks'] = num_blocks
     config['num_images'] = num_images
     config['progress'] = progress
-    config['num_tokens'] = num_tokens
     tf.summary.scalar('progress', progress)
 
     real_images = networks.blend_images(
@@ -265,20 +262,17 @@ class Model(object):
         generator_fn=lambda inputs: g_fn(inputs)[0],
         discriminator_fn=lambda images, unused_cond: d_fn(images)[0],
         real_data=real_images,
-        generator_inputs=(noises, gen_one_hot_labels, *gen_condition_labels.values()))
+        generator_inputs=(noises, *gen_condition_labels.values()))
 
     ########## Define loss.
     gan_loss = train_util.define_loss(gan_model, **config)
 
     ########## Auxiliary loss functions
-    def _compute_ac_loss(images, target_one_hot_labels, condition_labels):
+    def _compute_ac_loss(images, condition_labels):
       with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
         _, end_points = d_fn(images)
-      pitch_error = tf.nn.softmax_cross_entropy_with_logits_v2(
-        labels=tf.stop_gradient(target_one_hot_labels),
-        logits=end_points['classification_logits'])
       condition_errors = [c.compute_error(condition_labels[k], end_points["{}_classification_logits".format(k)]) for k, c in conditions.items()]
-      return tf.reduce_mean(pitch_error) + sum(condition_errors)
+      return sum(condition_errors)
 
     def _compute_gl_consistency_loss(data):
       """G&L consistency loss."""
@@ -311,12 +305,10 @@ class Model(object):
       # AC losses.
       fake_ac_loss = _compute_ac_loss(
         gan_model.generated_data,
-        gen_one_hot_labels,
         gen_condition_labels
       )
       real_ac_loss = _compute_ac_loss(
         gan_model.real_data,
-        real_one_hot_labels,
         real_condition_labels
       )
 
@@ -383,16 +375,13 @@ class Model(object):
       pitch_to_label_dict[pitch] = i
 
     # (label_ph, noise_ph) -> fake_wave_ph
-    labels_ph = tf.placeholder(tf.int32, [batch_size])
-    condition_label_phs = OrderedDict(((k, c.get_placeholder(batch_size)) for k, c in conditions.items()))
+    condition_label_phs = OrderedDict(((k, c.get_placeholder(batch_size, c.num_tokens)) for k, c in conditions.items()))
     noises_ph = tf.placeholder(tf.float32, [batch_size,
                                             config['latent_vector_size']])
     num_pitches = len(pitch_counts)
-    
-    one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
 
     with load_scope:
-      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph, *condition_label_phs.values()))
+      fake_data_ph, _ = g_fn((noises_ph, *condition_label_phs.values()))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
@@ -423,12 +412,10 @@ class Model(object):
     self.generator_ema = generator_ema
     self.generator_vars_to_restore = generator_vars_to_restore
     self.real_images = real_images
-    self.real_one_hot_labels = real_one_hot_labels
     self.conditions = conditions
     self.load_scope = load_scope
     self.pitch_counts = pitch_counts
     self.pitch_to_label_dict = pitch_to_label_dict
-    self.labels_ph = labels_ph
     self.condition_label_phs = condition_label_phs
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
@@ -456,17 +443,13 @@ class Model(object):
 
     fake_batch_size = config['fake_batch_size']
     real_batch_size = self.batch_size
-    real_one_hot_labels = self.real_one_hot_labels
-    num_tokens = real_one_hot_labels.shape[1].value
 
     # When making prediction, use the ema smoothed generator vars by
     # `_custom_getter`.
     with self.load_scope:
       noises = train_util.make_latent_vectors(fake_batch_size, **config)
-      one_hot_labels = util.make_ordered_one_hot_vectors(fake_batch_size,
-                                                         num_tokens)
-      condition_labels = [c.get_summary_labels(fake_batch_size) for c in self.conditions.values()]
-      fake_images = self.gan_model.generator_fn((noises, one_hot_labels, *condition_labels))
+      condition_labels = [c.get_summary_labels(fake_batch_size, c.num_tokens) for c in self.conditions.values()]
+      fake_images = self.gan_model.generator_fn((noises, *condition_labels))
       real_images = self.real_images
 
     # Set shapes
@@ -565,13 +548,13 @@ class Model(object):
       end = (i + 1) * self.batch_size
 
       feed_dict = {
-          self.labels_ph: labels[start:end],
           self.noises_ph: z[start:end]
       }
 
       for key, ph in self.condition_label_phs.items():
         feed_dict[ph] = list(map(lambda d: d[key], condition_labelses[start:end]))
 
+      feed_dict[self.condition_label_phs['pitch']] = labels[start:end]
       print("feed_dict = {}".format(feed_dict))
         
       waves = self.sess.run(
