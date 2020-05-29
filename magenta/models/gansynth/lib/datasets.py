@@ -247,9 +247,38 @@ class NSynthInstrumentFamilyTFRecordDataset(NSynthGenericConditionsTFRecordDatas
       conditions.create_instrument_family_condition(config, self.meta)
     ])
 
+
+class NSynthInstrumentFamilyOnlyTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthInstrumentFamilyOnlyTFRecordDataset, self).__init__(config)
+
+    self.conditions = collections.OrderedDict([
+      conditions.create_instrument_family_condition(config, self.meta)
+    ])
+
+class NSynthInstrumentSourceOnlyTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthInstrumentSourceOnlyTFRecordDataset, self).__init__(config)
+
+    self.conditions = collections.OrderedDict([
+      conditions.create_instrument_source_condition(config, self.meta)
+    ])
+
+class NSynthInstrumentSourceTFRecordDataset(NSynthGenericConditionsTFRecordDataset):
+  def __init__(self, config):
+    super(NSynthInstrumentSourceTFRecordDataset, self).__init__(config)
+
+    self.conditions = collections.OrderedDict([
+      conditions.create_pitch_condition(config, self.meta),
+      conditions.create_instrument_source_condition(config, self.meta)
+    ])
+
   
 registry = {
     'nsynth_tfrecord': NSynthTFRecordDataset,
     'nsynth_qualities_tfrecord': NSynthQualitiesTFRecordDataset,
-    'nsynth_instrument_family_tfrecord': NSynthInstrumentFamilyTFRecordDataset
+    'nsynth_instrument_family_tfrecord': NSynthInstrumentFamilyTFRecordDataset,
+    'nsynth_instrument_family_only_tfrecord': NSynthInstrumentFamilyTFRecordDataset,
+    'nsynth_instrument_source_only_tfrecord': NSynthInstrumentSourceOnlyTFRecordDataset,
+    'nsynth_instrument_source_tfrecord': NSynthInstrumentSourceTFRecordDataset
 }

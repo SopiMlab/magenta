@@ -43,6 +43,28 @@ def create_instrument_family_condition(config, meta):
         ]
       ))
 
+def create_instrument_source_condition(config, meta):
+    source_count = 3
+    source_counts = [0] * source_count
+    for m in meta.values():
+        source_counts[m["instrument_source"]] += 1
+
+    n_examples = len(meta)
+
+    families_logits = list(map(lambda p: [1.0 - p, p], map(lambda fc: fc / n_examples, source_counts)))
+
+    return ("instrument_source", ConditionDef(
+        calculate_num_tokens = lambda _: source_count,
+        get_placeholder = lambda batch_size, num_tokens: tf.placeholder(tf.float32, [batch_size, num_tokens]),
+        get_summary_labels = lambda batch_size, num_tokens: util.make_ordered_one_hot_vectors(batch_size, num_tokens),
+        provide_labels = lambda batch_size: tf.cast(tf.transpose(tf.random.categorical(tf.log(families_logits), batch_size)), tf.float32),
+        compute_error = lambda labels, logits: tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.stop_gradient(labels), logits=logits)),
+        get_label_from_record = lambda record: tf.one_hot(record["instrument_source"], depth=source_count)[0],
+        required_features = [
+          ('instrument_source', tf.FixedLenFeature([1], dtype=tf.int64))
+        ]
+      ))
+
 def create_qualities_condition(config, meta):
     qualities_count = 10
     quality_counts = reduce(lambda qcs, m: list(map(lambda qc, q: qc + q, qcs, m["qualities"])), meta.values(), [0] * qualities_count)
