@@ -73,6 +73,8 @@ REQUIRED_PACKAGES = [
     # Temporary fix for:
     # https://issues.apache.org/jira/projects/AVRO/issues/AVRO-2737?filter=allopenissues
     'avro-python3 !=1.9.2',
+    # extra GANSpace deps
+    'fbpca == 1.0'
 ]
 
 EXTRAS_REQUIRE = {

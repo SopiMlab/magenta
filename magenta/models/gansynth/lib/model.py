@@ -522,8 +522,17 @@ class Model(object):
 
     # Generate
     start_time = time.time()
-    results = []
+
+    def layer_zeros(layer_name):
+      layer_shape = self.fake_data_endpoints[layer_name].get_shape().as_list()
+      zeros_shape = (n_tot, *layer_shape[1:])
+      return np.zeros(zeros_shape, dtype=np.float32)
+
+    # Create dict by layer name
+    results = {name: layer_zeros(name) for name in layer_names}
+
     for i in range(num_batches):
+      print("batch {}/{}".format(i+1, num_batches))
       start = i * self.batch_size
       end = (i + 1) * self.batch_size
 
@@ -531,19 +540,14 @@ class Model(object):
                             feed_dict={self.labels_ph: labels[start:end],
                                        self.noises_ph: z[start:end]})
 
-      results.append(layer_outputs)
+      for j, (name, output) in enumerate(zip(layer_names, layer_outputs)):
+        results[name][start:end] = output
 
-    merged_results = np.stack(results, axis=1)
-
-    def truncate_to_sample_count(v):
-      try:
-        return v[:n_samples]
-      except:
-        return v
-
-    # Create dict by layer name and remove extra values
-    results_dict = {name:truncate_to_sample_count(merged_results[i][0]) for i, name in enumerate(layer_names)}
-    return results_dict
+    # Remove extra values
+    for arr in results.values():
+      arr.resize((n_samples, *arr.shape[1:]))
+      
+    return results
 
   def generate_samples(self, n_samples, pitch=None, max_audio_length=64000):
     """Generate random latent fake samples.
