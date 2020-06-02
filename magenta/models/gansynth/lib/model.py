@@ -535,14 +535,14 @@ class Model(object):
 
     merged_results = np.stack(results, axis=1)
 
-    def concat_to_sample_count(v):
+    def truncate_to_sample_count(v):
       try:
         return v[:n_samples]
       except:
         return v
 
     # Create dict by layer name and remove extra values
-    results_dict = {name:concat_to_sample_count(merged_results[i][0]) for i, name in enumerate(layer_names)}
+    results_dict = {name:truncate_to_sample_count(merged_results[i][0]) for i, name in enumerate(layer_names)}
     return results_dict
 
   def generate_samples(self, n_samples, pitch=None, max_audio_length=64000):
