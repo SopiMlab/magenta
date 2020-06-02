@@ -377,7 +377,7 @@ class Model(object):
     num_pitches = len(pitch_counts)
     one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
     with load_scope:
-      fake_data_ph, _ = g_fn((noises_ph, one_hot_labels_ph))
+      fake_data_ph, fake_data_endpoints = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
@@ -415,6 +415,7 @@ class Model(object):
     self.labels_ph = labels_ph
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
+    self.fake_data_endpoints = fake_data_endpoints
     self.saver = tf.train.Saver()
     self.sess = tf.Session()
     self.train_time = train_time
@@ -483,6 +484,66 @@ class Model(object):
 
   def generate_z(self, n):
     return np.random.normal(size=[n, self.config['latent_vector_size']])
+
+  def generate_layer_outputs(self, n_samples, layer_names=None, pitch=None):
+    """ Runs the models and returns all the activations for the layers in it.
+
+      Args:
+        layer_names   List of layers to compute (If none, all layers are computed)
+
+      Returns:
+        Dictionary containing a key for each layer with the value of their outputs.
+    """
+    # Create list of pitches to generate
+    if pitch is not None:
+      pitches = [pitch] * n_samples
+    else:
+      all_pitches = []
+      for k, v in self.pitch_counts.items():
+        all_pitches.extend([k] * v)
+      pitches = np.random.choice(all_pitches, n_samples)
+    z = self.generate_z(len(pitches))
+    return self.generate_layer_outputs_from_z(z, pitches, layer_names)
+
+  def generate_layer_outputs_from_z(self, z, pitches, layer_names=None):
+    if layer_names is None or len(layer_names) == 0:
+      layer_names = self.fake_data_endpoints.keys()
+
+    layers = [self.fake_data_endpoints[n] for n in layer_names]
+
+    labels = self._pitches_to_labels(pitches)
+    n_samples = len(labels)
+    num_batches = int(np.ceil(float(n_samples) / self.batch_size))
+    n_tot = num_batches * self.batch_size
+    padding = n_tot - n_samples
+    # Pads zeros to make batches even batch size.
+    labels = labels + [0] * padding
+    z = np.concatenate([z, np.zeros([padding, z.shape[1]])], axis=0)
+
+    # Generate
+    start_time = time.time()
+    results = []
+    for i in range(num_batches):
+      start = i * self.batch_size
+      end = (i + 1) * self.batch_size
+
+      layer_outputs = self.sess.run(layers,
+                            feed_dict={self.labels_ph: labels[start:end],
+                                       self.noises_ph: z[start:end]})
+
+      results.append(layer_outputs)
+
+    merged_results = np.stack(results, axis=1)
+
+    def concat_to_sample_count(v):
+      try:
+        return v[:n_samples]
+      except:
+        return v
+
+    # Create dict by layer name and remove extra values
+    results_dict = {name:concat_to_sample_count(merged_results[i][0]) for i, name in enumerate(layer_names)}
+    return results_dict
 
   def generate_samples(self, n_samples, pitch=None, max_audio_length=64000):
     """Generate random latent fake samples.
