@@ -66,7 +66,7 @@ def main(unused_argv):
 
   if FLAGS.seed != None:
     np.random.seed(FLAGS.seed)
-    tf.random.set_seed(FLAGS.seed)
+    tf.random.set_random_seed(FLAGS.seed)
 
   if sum((int(f != None) for f in [FLAGS.random_z_count, FLAGS.activations_in_file])) != 1:
     print("either --random_z_count or --activations_in_file must be specified")
