@@ -392,6 +392,7 @@ def generator(z,
           x = resolution_schedule.upscale(x, resolution_schedule.scale_base)
           x = _conv2d('conv0', x, kernel_size, num_filters_fn(block_id))
           x = _conv2d('conv1', x, kernel_size, num_filters_fn(block_id))
+          end_points['conv1_{}'.format(block_id)] = x
         lods.append(x)
 
     outputs = []
