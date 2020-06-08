@@ -355,7 +355,7 @@ def generator(z,
     end_points[name] = x
     offset_ph = tf.placeholder_with_default(np.zeros(x.shape, x.dtype.as_numpy_dtype), shape=x.shape, name=name)
     offsets[name] = offset_ph
-    return x
+    return x + offset_ph
 
   with tf.variable_scope(scope, reuse=reuse):
     with tf.name_scope('input'):
