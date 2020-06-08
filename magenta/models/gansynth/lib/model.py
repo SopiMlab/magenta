@@ -377,7 +377,7 @@ class Model(object):
     num_pitches = len(pitch_counts)
     one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
     with load_scope:
-      fake_data_ph, fake_data_endpoints = g_fn((noises_ph, one_hot_labels_ph))
+      fake_data_ph, fake_data_endpoints, fake_offsets = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
@@ -416,6 +416,7 @@ class Model(object):
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
     self.fake_data_endpoints = fake_data_endpoints
+    self.fake_offsets = fake_offsets
     self.saver = tf.train.Saver()
     self.sess = tf.Session()
     self.train_time = train_time
@@ -543,13 +544,14 @@ class Model(object):
       for j, (name, output) in enumerate(zip(layer_names, layer_outputs)):
         results[name][start:end] = output
 
+    truncated_results = {}
     # Remove extra values
-    for arr in results.values():
-      arr.resize((n_samples, *arr.shape[1:]))
+    for key, arr in results.items():
+      truncated_results[key] = np.resize(arr, (n_samples, *arr.shape[1:]))
       
-    return results
+    return truncated_results
 
-  def generate_samples(self, n_samples, pitch=None, max_audio_length=64000):
+  def generate_samples(self, n_samples, pitch=None, max_audio_length=64000, layer_offsets=None):
     """Generate random latent fake samples.
 
     If pitch is not specified, pitches will be sampled randomly.
@@ -558,6 +560,7 @@ class Model(object):
       n_samples: Number of samples to generate.
       pitch: List of pitches to generate.
       max_audio_length: Trim generation to <= this length.
+      layer_offsets: Dictionary keyed by layer name, containing offsets for layers.
 
     Returns:
       An array of audio for the notes [n_notes, n_audio_samples].
@@ -571,9 +574,9 @@ class Model(object):
         all_pitches.extend([k]*v)
       pitches = np.random.choice(all_pitches, n_samples)
     z = self.generate_z(len(pitches))
-    return self.generate_samples_from_z(z, pitches, max_audio_length)
+    return self.generate_samples_from_z(z, pitches, max_audio_length, layer_offsets)
 
-  def generate_samples_from_z(self, z, pitches, max_audio_length=64000):
+  def generate_samples_from_z(self, z, pitches, max_audio_length=64000, layer_offsets=None):
     """Generate fake samples for given latents and pitches.
 
     Args:
@@ -600,9 +603,17 @@ class Model(object):
       start = i * self.batch_size
       end = (i + 1) * self.batch_size
 
-      waves = self.sess.run(self.fake_waves_ph,
-                            feed_dict={self.labels_ph: labels[start:end],
-                                       self.noises_ph: z[start:end]})
+      feed_dict = {
+          self.labels_ph: labels[start:end],
+          self.noises_ph: z[start:end]
+      }
+      if layer_offsets:
+        for k, v in layer_offsets.items():
+          assert k in self.fake_offsets, "Offset placeholder for layer '{}' does not exist!".format(k)
+          feed_dict[self.fake_offsets[k]] = v
+
+
+      waves = self.sess.run(self.fake_waves_ph, feed_dict=feed_dict)
       # Trim waves
       for wave in waves:
         waves_list.append(wave[:max_audio_length, 0])

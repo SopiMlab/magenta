@@ -22,6 +22,7 @@ theano implementation.
 """
 
 import math
+import numpy as np
 from magenta.models.gansynth.lib import layers
 import six
 import tensorflow.compat.v1 as tf
@@ -347,6 +348,14 @@ def generator(z,
   he_init = contrib_layers.variance_scaling_initializer()
 
   end_points = {}
+  offsets = {}
+
+
+  def hook(name, x):
+    end_points[name] = x
+    offset_ph = tf.placeholder_with_default(np.zeros(x.shape, x.dtype.as_numpy_dtype), shape=x.shape, name=name)
+    offsets[name] = offset_ph
+    return x
 
   with tf.variable_scope(scope, reuse=reuse):
     with tf.name_scope('input'):
@@ -392,7 +401,7 @@ def generator(z,
           x = resolution_schedule.upscale(x, resolution_schedule.scale_base)
           x = _conv2d('conv0', x, kernel_size, num_filters_fn(block_id))
           x = _conv2d('conv1', x, kernel_size, num_filters_fn(block_id))
-          end_points['conv1_{}'.format(block_id)] = x
+          x = hook('conv1_{}'.format(block_id), x)
         lods.append(x)
 
     outputs = []
@@ -412,12 +421,10 @@ def generator(z,
           lod = _to_rgb(lods[block_id - 1])
         scale = resolution_schedule.scale_factor(block_id)
         lod = resolution_schedule.upscale(lod, scale)
-        end_points['upscaled_rgb_{}'.format(block_id)] = lod
 
         # alpha_i is used to replace lod_select. Note sum(alpha_i) is
         # garanteed to be 1.
         alpha = _generator_alpha(block_id, progress)
-        end_points['alpha_{}'.format(block_id)] = alpha
 
         outputs.append(lod * alpha)
 
@@ -426,7 +433,7 @@ def generator(z,
     predictions.set_shape([batch_size, final_h, final_w, colors])
     end_points['predictions'] = predictions
 
-  return predictions, end_points
+  return predictions, end_points, offsets
 
 
 def discriminator(x,
