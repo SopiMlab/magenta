@@ -113,7 +113,8 @@ def main(unused_argv):
   pca_dict = {
     "comp": z_comp,
     "stdev": z_stdev,
-    "var_ratio": z_var_ratio
+    "var_ratio": z_var_ratio,
+    "layer": FLAGS.layer
   }
 
   if FLAGS.pca_out_file != None:
