@@ -61,6 +61,9 @@ absl.flags.DEFINE_integer(
 FLAGS = absl.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
 
+def log(*args):
+  print(*args, file=sys.stderr)
+
 def main(unused_argv):
   absl.flags.FLAGS.alsologtostderr = True
 
@@ -69,7 +72,7 @@ def main(unused_argv):
     tf.random.set_random_seed(FLAGS.seed)
 
   if sum((int(f != None) for f in [FLAGS.random_z_count, FLAGS.activations_in_file])) != 1:
-    print("either --random_z_count or --activations_in_file must be specified")
+    log("either --random_z_count or --activations_in_file must be specified")
     sys.exit(1)
 
   if FLAGS.random_z_count != None:
@@ -79,9 +82,9 @@ def main(unused_argv):
 
     zs = model.generate_z(FLAGS.random_z_count)
     pitches = np.array([FLAGS.pitch] * FLAGS.random_z_count)
-    print("batch_size = {}".format(FLAGS.batch_size))
-    print("zs.shape = {}".format(zs.shape))
-    print("pitches.shape = {}".format(pitches.shape))
+    log("batch_size = {}".format(FLAGS.batch_size))
+    log("zs.shape = {}".format(zs.shape))
+    log("pitches.shape = {}".format(pitches.shape))
 
     # returns a rank 4 array, e.g. layer conv1_2 has shape (random_z_count, 4, 32, 256)
     activations = model.generate_layer_outputs_from_z(
@@ -98,13 +101,13 @@ def main(unused_argv):
     reduce(lambda a, b: a*b, activations.shape[1:], 1)
   ))
   
-  print("activations.shape = {}".format(activations.shape))
+  log("activations.shape = {}".format(activations.shape))
 
   n, n_components = activations.shape
 
   assert n >= n_components
 
-  print("computing PCA")
+  log("computing PCA")
   estimator = estimators.FacebookPCAEstimator(n_components)
   estimator.fit(activations)
 
@@ -118,7 +121,7 @@ def main(unused_argv):
   }
 
   if FLAGS.pca_out_file != None:
-    print("saving PCA result to {}".format(FLAGS.pca_out_file))
+    log("saving PCA result to {}".format(FLAGS.pca_out_file))
     with open(FLAGS.pca_out_file, "wb") as fp:
       pickle.dump(pca_dict, fp, pickle.HIGHEST_PROTOCOL)
   
