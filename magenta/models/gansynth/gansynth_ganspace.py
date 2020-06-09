@@ -18,6 +18,11 @@ absl.flags.DEFINE_string('ckpt_dir',
                          'Path to the base directory of pretrained checkpoints.'
                          'The base directory should contain many '
                          '"stage_000*" subdirectories.')
+absl.flags.DEFINE_boolean(
+  "list_layers",
+  False,
+  "List GANSynth layer names and shapes."
+)
 absl.flags.DEFINE_string(
   "layer",
   "conv1_2",
@@ -71,15 +76,24 @@ def main(unused_argv):
     np.random.seed(FLAGS.seed)
     tf.random.set_random_seed(FLAGS.seed)
 
-  if sum((int(f != None) for f in [FLAGS.random_z_count, FLAGS.activations_in_file])) != 1:
-    log("either --random_z_count or --activations_in_file must be specified")
+  if sum((int(f != None) for f in [FLAGS.list_layers, FLAGS.random_z_count, FLAGS.activations_in_file])) != 1:
+    log("exactly one of --list_layers, --random_z_count or --activations_in_file must be specified")
     sys.exit(1)
 
-  if FLAGS.random_z_count != None:
+  model = None
+  if FLAGS.list_layers or FLAGS.random_z_count != None:
     # Load the model
     flags = lib_flags.Flags({"eval_batch_size": FLAGS.batch_size})
     model = lib_model.Model.load_from_path(FLAGS.ckpt_dir, flags)
 
+  if FLAGS.list_layers:
+    for name, layer in model.fake_data_endpoints.items():
+      internal_name = layer.name
+      log(name)
+      log("  name: {}".format(internal_name))
+      log("  shape: {}".format(layer.shape))
+    return
+  elif FLAGS.random_z_count != None:
     zs = model.generate_z(FLAGS.random_z_count)
     pitches = np.array([FLAGS.pitch] * FLAGS.random_z_count)
     log("batch_size = {}".format(FLAGS.batch_size))
