@@ -10,11 +10,20 @@
 
 # from https://github.com/harskish/ganspace
 
+import math
+import sys
+
 from sklearn.decomposition import FastICA, PCA, IncrementalPCA, MiniBatchSparsePCA, SparsePCA, KernelPCA
 import fbpca
 import numpy as np
 import itertools
 from types import SimpleNamespace
+
+from scipy.special import binom
+
+def log(*args):
+  print(*args, file=sys.stderr)
+  sys.stderr.flush()
 
 # ICA
 class ICAEstimator():
@@ -135,26 +144,44 @@ class FacebookPCAEstimator():
         return "fbpca_c{}_it{}_l{}".format(self.n_components, self.n_iter, self.l)
 
     def fit(self, X):
+        log("run fbpca.pca({}, k={}, n_iter={}, raw={}, l={})".format(X, self.n_components, self.n_iter, True, self.l))
         U, s, Va = fbpca.pca(X, k=self.n_components, n_iter=self.n_iter, raw=True, l=self.l)
         self.transformer.components_ = Va
         
         # Save variance for later
+
+        log("compute variance")
         self.total_var = X.var(axis=0).sum()
 
         # Compute projected standard deviations
+        log("compute projected stdev")
         self.stdev = np.dot(self.transformer.components_, X.T).std(axis=1)
 
         # Sort components based on explained variance
+        log("sort components")
         idx = np.argsort(self.stdev)[::-1]
         self.stdev = self.stdev[idx]
         self.transformer.components_[:] = self.transformer.components_[idx]
-
+        
         # Check orthogonality
-        dotps = [np.dot(*self.transformer.components_[[i, j]])
-            for (i, j) in itertools.combinations(range(self.n_components), 2)]
+        dotps = np.zeros(sum(range(self.n_components)), dtype=np.float32)
+        n_dots = self.n_components
+        log("compute pairwise dot products (n_dots={})".format(n_dots))
+        n_prev_dots = 0
+        for i in range(self.n_components):
+            row0 = self.transformer.components_[i]
+            row1s = self.transformer.components_[i+1:].T
+            dots_start = n_prev_dots
+            dots_count = row1s.shape[1]
+            log("dot() i={}/{}, row0.shape={}, row1s.shape={}, dots_start={}, dots_count={}".format(i, n_dots-1, row0.shape, row1s.shape, dots_start, dots_count))
+            dotps[dots_start:dots_start+dots_count] = np.dot(row0, row1s)
+            n_prev_dots += dots_count
+            
+        log("check orthogonality")
         if not np.allclose(dotps, 0, atol=1e-4):
             print('FBPCA components not orghogonal, max dot', np.abs(dotps).max())
 
+        log("compute mean")
         self.transformer.mean_ = X.mean(axis=0, keepdims=True)
         
     def get_components(self):
