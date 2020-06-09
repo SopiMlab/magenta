@@ -3,6 +3,7 @@ import os
 import pickle
 import sys
 
+from absl import logging
 import absl.flags
 from magenta.models.gansynth.lib import flags as lib_flags
 from magenta.models.gansynth.lib import generate_util as gu
@@ -66,10 +67,6 @@ absl.flags.DEFINE_integer(
 FLAGS = absl.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
 
-def log(*args):
-  print(*args, file=sys.stderr)
-  sys.stderr.flush()
-
 product = lambda xs: reduce(lambda a, b: a*b, xs, 1)
   
 def main(unused_argv):
@@ -80,7 +77,7 @@ def main(unused_argv):
     tf.random.set_random_seed(FLAGS.seed)
 
   if sum((int(f) for f in [FLAGS.list_layers, FLAGS.random_z_count != None, FLAGS.activations_in_file != None])) != 1:
-    log("exactly one of --list_layers, --random_z_count or --activations_in_file must be specified")
+    logging.info("exactly one of --list_layers, --random_z_count or --activations_in_file must be specified")
     sys.exit(1)
 
   model = None
@@ -92,17 +89,17 @@ def main(unused_argv):
   if FLAGS.list_layers:
     for name, layer in model.fake_data_endpoints.items():
       internal_name = layer.name
-      log(name)
-      log("  name: {}".format(internal_name))
-      log("  shape: {}".format(layer.shape))
-      log("  min. random_z_count: {}".format(product(layer.shape[1:])))
+      logging.info(name)
+      logging.info("  name: {}".format(internal_name))
+      logging.info("  shape: {}".format(layer.shape))
+      logging.info("  min. random_z_count: {}".format(product(layer.shape[1:])))
     return
   elif FLAGS.random_z_count != None:
     zs = model.generate_z(FLAGS.random_z_count)
     pitches = np.array([FLAGS.pitch] * FLAGS.random_z_count)
-    log("batch_size = {}".format(FLAGS.batch_size))
-    log("zs.shape = {}".format(zs.shape))
-    log("pitches.shape = {}".format(pitches.shape))
+    logging.info("batch_size = {}".format(FLAGS.batch_size))
+    logging.info("zs.shape = {}".format(zs.shape))
+    logging.info("pitches.shape = {}".format(pitches.shape))
 
     # returns a rank 4 array, e.g. layer conv1_2 has shape (random_z_count, 4, 32, 256)
     activations = model.generate_layer_outputs_from_z(
@@ -112,35 +109,52 @@ def main(unused_argv):
     )[FLAGS.layer]
   elif FLAGS.activations_in_file != None:
     activations = np.load(FLAGS.activations_in_file)
-    
+
+  logging.info("activations.shape = {}".format(activations.shape))
+  
+  activation_shape = activations.shape[1:]
+  
   # reshape to rank 2 for PCA, preserving the first dimension and flattening the rest
   activations = activations.reshape((
     activations.shape[0],
     product(activations.shape[1:])
   ))
   
-  log("activations.shape = {}".format(activations.shape))
+  logging.info("reshaped activations.shape = {}".format(activations.shape))
 
   n, n_components = activations.shape
 
   assert n >= n_components
 
-  log("running estimator")
+  # subtract mean
+  global_mean = activations.mean(axis=0, keepdims=True, dtype=np.float32)
+  activations -= global_mean
+  
+  logging.info("running estimator")
   estimator = estimators.FacebookPCAEstimator(n_components)
   estimator.fit(activations)
 
-  log("getting components")
-  z_comp, z_stdev, z_var_ratio = estimator.get_components()
+  logging.info("getting components")
+  comp, stdev, var_ratio = estimator.get_components()
+
+  # normalize
+  comp /= np.linalg.norm(comp, axis=-1, keepdims=True)
+
+  # inflate
+  comp = comp.reshape(-1, *activation_shape)
+  global_mean = global_mean.reshape(activation_shape)
   
   pca_dict = {
-    "comp": z_comp,
-    "stdev": z_stdev,
-    "var_ratio": z_var_ratio,
-    "layer": FLAGS.layer
+    "layer": FLAGS.layer,
+    "comp": comp,
+    "stdev": stdev,
+    "var_ratio": var_ratio
   }
 
+  logging.info("pca_dict = {}".format(pca_dict))
+  
   if FLAGS.pca_out_file != None:
-    log("saving PCA result to {}".format(FLAGS.pca_out_file))
+    logging.info("saving PCA result to {}".format(FLAGS.pca_out_file))
     with open(FLAGS.pca_out_file, "wb") as fp:
       pickle.dump(pca_dict, fp, pickle.HIGHEST_PROTOCOL)
   

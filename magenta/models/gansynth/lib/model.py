@@ -22,6 +22,7 @@ import json
 import os
 import time
 
+from absl import logging
 from magenta.models.gansynth.lib import data_helpers
 from magenta.models.gansynth.lib import flags as lib_flags
 from magenta.models.gansynth.lib import network_functions as net_fns
@@ -533,7 +534,7 @@ class Model(object):
     results = {name: layer_zeros(name) for name in layer_names}
 
     for i in range(num_batches):
-      print("batch {}/{}".format(i+1, num_batches))
+      logging.info("batch {}/{}".format(i+1, num_batches))
       start = i * self.batch_size
       end = (i + 1) * self.batch_size
 
