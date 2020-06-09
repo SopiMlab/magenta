@@ -124,10 +124,11 @@ def main(unused_argv):
 
   assert n >= n_components
 
-  log("computing PCA")
+  log("running estimator")
   estimator = estimators.FacebookPCAEstimator(n_components)
   estimator.fit(activations)
 
+  log("getting components")
   z_comp, z_stdev, z_var_ratio = e.get_components()
   
   pca_dict = {
