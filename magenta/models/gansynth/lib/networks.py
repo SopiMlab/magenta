@@ -377,7 +377,9 @@ def generator(z,
         x = tf.pad(x, [[0] * 2, [start_h - 1] * 2, [start_w - 1] * 2, [0] * 2])
         # The output is start_h x start_w x num_filters_fn(1).
         x = _conv2d('conv0', x, (start_h, start_w), num_filters_fn(1), 'VALID')
+        x = hook('conv0', x)
         x = _conv2d('conv1', x, kernel_size, num_filters_fn(1))
+        x = hook('conv1', x)
       lods = [x]
 
     if resolution_schedule.scale_mode == 'H':
@@ -400,6 +402,7 @@ def generator(z,
         else:
           x = resolution_schedule.upscale(x, resolution_schedule.scale_base)
           x = _conv2d('conv0', x, kernel_size, num_filters_fn(block_id))
+          x = hook('conv0_{}'.format(block_id), x)
           x = _conv2d('conv1', x, kernel_size, num_filters_fn(block_id))
           x = hook('conv1_{}'.format(block_id), x)
         lods.append(x)
