@@ -25,7 +25,7 @@ absl.flags.DEFINE_boolean(
 )
 absl.flags.DEFINE_string(
   "layer",
-  "conv1_2",
+  "conv0",
   "Name of GANSynth layer to operate on."
 )
 absl.flags.DEFINE_integer(
@@ -69,6 +69,8 @@ tf.logging.set_verbosity(tf.logging.INFO)
 def log(*args):
   print(*args, file=sys.stderr)
 
+product = lambda xs: reduce(lambda a, b: a*b, xs, 1)
+  
 def main(unused_argv):
   absl.flags.FLAGS.alsologtostderr = True
 
@@ -76,7 +78,7 @@ def main(unused_argv):
     np.random.seed(FLAGS.seed)
     tf.random.set_random_seed(FLAGS.seed)
 
-  if sum((int(f != None) for f in [FLAGS.list_layers, FLAGS.random_z_count, FLAGS.activations_in_file])) != 1:
+  if sum((int(f) for f in [FLAGS.list_layers, FLAGS.random_z_count != None, FLAGS.activations_in_file != None])) != 1:
     log("exactly one of --list_layers, --random_z_count or --activations_in_file must be specified")
     sys.exit(1)
 
@@ -92,6 +94,7 @@ def main(unused_argv):
       log(name)
       log("  name: {}".format(internal_name))
       log("  shape: {}".format(layer.shape))
+      log("  min. random_z_count: {}".format(product(layer.shape[1:])))
     return
   elif FLAGS.random_z_count != None:
     zs = model.generate_z(FLAGS.random_z_count)
@@ -112,7 +115,7 @@ def main(unused_argv):
   # reshape to rank 2 for PCA, preserving the first dimension and flattening the rest
   activations = activations.reshape((
     activations.shape[0],
-    reduce(lambda a, b: a*b, activations.shape[1:], 1)
+    product(activations.shape[1:])
   ))
   
   log("activations.shape = {}".format(activations.shape))
