@@ -68,6 +68,7 @@ tf.logging.set_verbosity(tf.logging.INFO)
 
 def log(*args):
   print(*args, file=sys.stderr)
+  sys.stderr.flush()
 
 product = lambda xs: reduce(lambda a, b: a*b, xs, 1)
   
@@ -129,7 +130,7 @@ def main(unused_argv):
   estimator.fit(activations)
 
   log("getting components")
-  z_comp, z_stdev, z_var_ratio = e.get_components()
+  z_comp, z_stdev, z_var_ratio = estimator.get_components()
   
   pca_dict = {
     "comp": z_comp,
