@@ -378,7 +378,7 @@ class Model(object):
     num_pitches = len(pitch_counts)
     one_hot_labels_ph = tf.one_hot(labels_ph, num_pitches)
     with load_scope:
-      fake_data_ph, fake_data_endpoints, fake_offsets = g_fn((noises_ph, one_hot_labels_ph))
+      fake_data_ph, fake_data_endpoints, fake_extras = g_fn((noises_ph, one_hot_labels_ph))
       fake_waves_ph = data_helper.data_to_waves(fake_data_ph)
 
     if config['train_time_limit'] is not None:
@@ -417,7 +417,7 @@ class Model(object):
     self.noises_ph = noises_ph
     self.fake_waves_ph = fake_waves_ph
     self.fake_data_endpoints = fake_data_endpoints
-    self.fake_offsets = fake_offsets
+    self.fake_extras = fake_extras
     self.saver = tf.train.Saver()
     self.sess = tf.Session()
     self.train_time = train_time
@@ -609,10 +609,56 @@ class Model(object):
           self.noises_ph: z[start:end]
       }
       if layer_offsets:
+        fake_offsets = self.fake_extras["offsets"]
         for k, v in layer_offsets.items():
-          assert k in self.fake_offsets, "Offset placeholder for layer '{}' does not exist!".format(k)
-          feed_dict[self.fake_offsets[k]] = v
+          assert k in fake_offsets, "Offset placeholder for layer '{}' does not exist!".format(k)
+          feed_dict[fake_offsets[k]] = v
 
+
+      waves = self.sess.run(self.fake_waves_ph, feed_dict=feed_dict)
+      # Trim waves
+      for wave in waves:
+        waves_list.append(wave[:max_audio_length, 0])
+
+    # Remove waves corresponding to the padded zeros.
+    result = np.stack(waves_list[:n_samples], axis=0)
+    print('generate_samples: generated {} samples in {}s'.format(
+        n_samples, time.time() - start_time))
+    return result
+
+  def generate_samples_from_layers(self, layers, pitches, max_audio_length=64000):
+    labels = self._pitches_to_labels(pitches)
+    n_samples = len(labels)
+    num_batches = int(np.ceil(float(n_samples) / self.batch_size))
+    n_tot = num_batches * self.batch_size
+    padding = n_tot - n_samples
+    # Pads zeros to make batches even batch size.
+    labels = labels + [0] * padding
+    z = self.generate_z(n_tot)
+
+    # Generate waves
+    start_time = time.time()
+    waves_list = []
+    for i in range(num_batches):
+      start = i * self.batch_size
+      end = (i + 1) * self.batch_size
+
+      feed_dict = {
+        self.labels_ph: labels[start:end],
+        self.noises_ph: z[start:end]
+      }
+
+      fake_scalers = self.fake_extras["scalers"]
+      fake_offsets = self.fake_extras["offsets"]
+      
+      for k, v in layers.items():
+        assert k in fake_scalers, "Scaler placeholder for layer '{}' does not exist!".format(k)
+        scaler = fake_scalers[k]
+        feed_dict[scaler] = np.zeros(1, dtype=scaler.dtype.as_numpy_dtype)
+
+        assert k in fake_offsets, "Offset placeholder for layer '{}' does not exist!".format(k)
+        offset = fake_offsets[k]        
+        feed_dict[offset] = v
 
       waves = self.sess.run(self.fake_waves_ph, feed_dict=feed_dict)
       # Trim waves

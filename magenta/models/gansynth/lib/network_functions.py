@@ -41,7 +41,7 @@ def generator_fn_specgram(inputs, **kwargs):
     to_rgb_activation = tf.tanh
   elif kwargs['to_rgb_activation'] == 'linear':
     to_rgb_activation = lambda x: x
-  fake_images, end_points, offsets = networks.generator(
+  fake_images, end_points, extras = networks.generator(
       z,
       kwargs['progress'],
       lambda block_id: _num_filters_fn(block_id, **kwargs),
@@ -55,7 +55,7 @@ def generator_fn_specgram(inputs, **kwargs):
   normalizer = data_normalizer.registry[kwargs['data_normalizer']](kwargs)
   fake_images = normalizer.denormalize_op(fake_images)
   fake_images.set_shape(shape)
-  return fake_images, end_points, offsets
+  return fake_images, end_points, extras
 
 
 def discriminator_fn_specgram(images, **kwargs):
