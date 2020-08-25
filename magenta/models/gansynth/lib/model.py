@@ -636,6 +636,8 @@ class Model(object):
     labels = labels + [0] * padding
     z = self.generate_z(n_tot)
 
+    layers_padded = {k: np.concatenate([v, np.zeros((padding, *v.shape[1:]), dtype=v.dtype)]) for k, v in layers.items()}
+    
     # Generate waves
     start_time = time.time()
     waves_list = []
@@ -651,14 +653,14 @@ class Model(object):
       fake_scalers = self.fake_extras["scalers"]
       fake_offsets = self.fake_extras["offsets"]
       
-      for k, v in layers.items():
+      for k, v in layers_padded.items():
         assert k in fake_scalers, "Scaler placeholder for layer '{}' does not exist!".format(k)
         scaler = fake_scalers[k]
         feed_dict[scaler] = np.zeros(1, dtype=scaler.dtype.as_numpy_dtype)
 
         assert k in fake_offsets, "Offset placeholder for layer '{}' does not exist!".format(k)
-        offset = fake_offsets[k]        
-        feed_dict[offset] = v
+        offset = fake_offsets[k]
+        feed_dict[offset] = v[start:end]
 
       waves = self.sess.run(self.fake_waves_ph, feed_dict=feed_dict)
       # Trim waves
