@@ -348,14 +348,16 @@ def generator(z,
   he_init = contrib_layers.variance_scaling_initializer()
 
   end_points = {}
+  scalers = {}
   offsets = {}
-
 
   def hook(name, x):
     end_points[name] = x
+    scaler_ph = tf.placeholder_with_default(np.ones(1, x.dtype.as_numpy_dtype), shape=1, name="{}_scaler".format(name))
+    scalers[name] = scaler_ph
     offset_ph = tf.placeholder_with_default(np.zeros(x.shape, x.dtype.as_numpy_dtype), shape=x.shape, name=name)
     offsets[name] = offset_ph
-    return x + offset_ph
+    return x * scaler_ph + offset_ph
 
   with tf.variable_scope(scope, reuse=reuse):
     with tf.name_scope('input'):
@@ -436,7 +438,7 @@ def generator(z,
     predictions.set_shape([batch_size, final_h, final_w, colors])
     end_points['predictions'] = predictions
 
-  return predictions, end_points, offsets
+  return predictions, end_points, {"scalers": scalers, "offsets": offsets}
 
 
 def discriminator(x,
