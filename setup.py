@@ -31,6 +31,9 @@ REQUIRED_PACKAGES = [
     'attrs',
     'backports.tempfile',
     'bokeh >= 0.12.0',
+    # dopamine-rl >= 3.1 introduces a dependency on jaxlib, which doesn't work on Windows
+    # https://github.com/magenta/magenta/issues/1786
+    'dopamine-rl < 3.1',
     # Temporary fix for gast issue with TF.
     # Details:
     # https://github.com/tensorflow/tensorflow/issues/32319
