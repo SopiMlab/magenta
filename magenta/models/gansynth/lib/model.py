@@ -672,3 +672,36 @@ class Model(object):
     print('generate_samples: generated {} samples in {}s'.format(
         n_samples, time.time() - start_time))
     return result
+
+  def make_edits_layer(self, pca, edits):
+    amounts = np.zeros(pca["comp"].shape[:1], dtype=np.float32)
+    stdevs = pca["stdev"]
+    stdevs_len = stdevs.shape[0]
+    if not isinstance(edits, np.ndarray):
+      edits = np.array(edits, dtype=stdevs.dtype)
+    edits_len = edits.shape[0]
+    if edits_len > stdevs_len:
+        raise ValueError("too many edits ({}) - PCA size is {}".format(edits_len, stdevs_len))
+  
+    padding = stdevs_len - edits_len
+    edits_padded = edits
+    
+    if padding > 0:
+        edits_padded = np.concatenate([edits, np.zeros(padding, dtype=edits.dtype)])
+    
+    amounts[:len(list(edits_padded))] = edits_padded * stdevs
+    
+    scaled_directions = amounts.reshape(-1, 1, 1, 1) * pca["comp"]
+  
+    layer = pca["global_mean"] + np.sum(scaled_directions, axis=0)
+
+    return layer
+  
+  def generate_samples_from_edits(self, pitches, edits, pca, max_audio_length=64000):
+    layers = []
+    for edit in edits:
+      layers.append(self.make_edits_layer(pca, edit))
+
+    layers = np.array(layers)
+      
+    return self.generate_samples_from_layers({pca["layer"]: layers}, pitches)
