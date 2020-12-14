@@ -626,7 +626,7 @@ class Model(object):
         n_samples, time.time() - start_time))
     return result
 
-  def generate_samples_from_layers(self, layers, pitches, max_audio_length=64000):
+  def generate_samples_from_layers(self, layers, pitches, max_audio_length=64000):    
     labels = self._pitches_to_labels(pitches)
     n_samples = len(labels)
     num_batches = int(np.ceil(float(n_samples) / self.batch_size))
@@ -639,7 +639,7 @@ class Model(object):
     layers_padded = {k: np.concatenate([v, np.zeros((padding, *v.shape[1:]), dtype=v.dtype)]) for k, v in layers.items()}
     
     # Generate waves
-    start_time = time.time()
+    start_time = time.monotonic()
     waves_list = []
     for i in range(num_batches):
       start = i * self.batch_size
@@ -669,39 +669,27 @@ class Model(object):
 
     # Remove waves corresponding to the padded zeros.
     result = np.stack(waves_list[:n_samples], axis=0)
-    print('generate_samples: generated {} samples in {}s'.format(
-        n_samples, time.time() - start_time))
+    print('generate_samples_from_layers: generated {} samples in {}s'.format(
+        n_samples, time.monotonic() - start_time))
     return result
 
   def make_edits_layer(self, pca, edits):
+    return self.make_edits_layers(pca, np.array([edits]))[0]
+
+  def make_edits_layers(self, pca, edits_batch):
+    n = len(edits_batch)
+    shape = (n,) + pca["global_mean"].shape
     amounts = np.zeros(pca["comp"].shape[:1], dtype=np.float32)
     stdevs = pca["stdev"]
     stdevs_len = stdevs.shape[0]
-    if not isinstance(edits, np.ndarray):
-      edits = np.array(edits, dtype=stdevs.dtype)
-    edits_len = edits.shape[0]
-    if edits_len > stdevs_len:
-        raise ValueError("too many edits ({}) - PCA size is {}".format(edits_len, stdevs_len))
-  
-    padding = stdevs_len - edits_len
-    edits_padded = edits
     
-    if padding > 0:
-        edits_padded = np.concatenate([edits, np.zeros(padding, dtype=edits.dtype)])
-    
-    amounts[:len(list(edits_padded))] = edits_padded * stdevs
-    
-    scaled_directions = amounts.reshape(-1, 1, 1, 1) * pca["comp"]
-  
-    layer = pca["global_mean"] + np.sum(scaled_directions, axis=0)
+    layers = np.zeros(shape)
+    for i, edits in enumerate(edits_batch):
+      edits_len = len(edits)      
+      layers[i,:] = pca["global_mean"] + np.sum((edits * stdevs[:edits_len]).reshape(-1, 1, 1, 1) * pca["comp"][:edits_len], axis=0)
 
-    return layer
+    return layers
   
-  def generate_samples_from_edits(self, pitches, edits, pca, max_audio_length=64000):
-    layers = []
-    for edit in edits:
-      layers.append(self.make_edits_layer(pca, edit))
-
-    layers = np.array(layers)
-      
+  def generate_samples_from_edits(self, pitches, edits_batch, pca, max_audio_length=64000):
+    layers = self.make_edits_layers(pca, edits_batch)
     return self.generate_samples_from_layers({pca["layer"]: layers}, pitches)
