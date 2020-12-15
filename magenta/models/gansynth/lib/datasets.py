@@ -22,6 +22,7 @@ import collections
 import json
 import os
 from magenta.models.gansynth.lib import spectral_ops
+from magenta.models.gansynth.lib import util
 import numpy as np
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -62,6 +63,7 @@ class NSynthTFRecordDataset(BaseDataset):
 
   def __init__(self, config):
       super(NSynthTFRecordDataset, self).__init__(config)
+      self._train_data_path = util.expand_path(config['train_data_path'])
       self._train_meta_path = None
       if 'train_meta_path' in config and config['train_meta_path']:
           self._train_meta_path = util.expand_path(config['train_meta_path'])
@@ -76,10 +78,9 @@ class NSynthTFRecordDataset(BaseDataset):
     
   def _get_dataset_from_path(self):
     dataset = tf.data.Dataset.list_files(self._train_data_path)
-    dataset = dataset.apply(contrib_data.shuffle_and_repeat(buffer_size=1000))
-    dataset = dataset.apply(
-        contrib_data.parallel_interleave(
-            tf.data.TFRecordDataset, cycle_length=20, sloppy=True))
+    dataset = dataset.shuffle(buffer_size=1000)
+    dataset = dataset.repeat()
+    dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=20)
     return dataset
 
   def provide_one_hot_labels(self, batch_size):
@@ -107,8 +108,17 @@ class NSynthTFRecordDataset(BaseDataset):
             value_dtype=tf.int64),
         num_oov_buckets=1)
 
-    def _parse_nsynth(example):
+    def _parse_nsynth(record):
       """Parsing function for NSynth dataset."""
+      features = {
+          'pitch': tf.FixedLenFeature([1], dtype=tf.int64),
+          'audio': tf.FixedLenFeature([length], dtype=tf.float32),
+          'qualities': tf.FixedLenFeature([10], dtype=tf.int64),
+          'instrument_source': tf.FixedLenFeature([1], dtype=tf.int64),
+          'instrument_family': tf.FixedLenFeature([1], dtype=tf.int64),
+      }
+
+      example = tf.parse_single_example(record, features)
       wave, label = example['audio'], example['pitch']
       wave = spectral_ops.crop_or_pad(wave[tf.newaxis, :, tf.newaxis],
                                       length,
@@ -118,7 +128,7 @@ class NSynthTFRecordDataset(BaseDataset):
       return wave, one_hot_label, label, example['instrument_source']
 
     dataset = self._get_dataset_from_path()
-    dataset = dataset.map(_parse_nsynth, num_parallel_calls=4)
+    dataset = dataset.map(_parse_nsynth, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
     # Filter just specified instrument sources
     def _is_wanted_source(s):
