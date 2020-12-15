@@ -13,11 +13,6 @@
 # limitations under the License.
 
 """Tests for shared data lib."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import copy
 import tempfile
 import time
@@ -26,13 +21,15 @@ from magenta.models.onsets_frames_transcription import configs
 from magenta.models.onsets_frames_transcription import constants
 from magenta.models.onsets_frames_transcription import data
 
-from magenta.music import audio_io
-from magenta.music import sequences_lib
-from magenta.music import testing_lib
-from magenta.music.protobuf import music_pb2
+from note_seq import audio_io
+from note_seq import sequences_lib
+from note_seq import testing_lib
+from note_seq.protobuf import music_pb2
 
 import numpy as np
 import tensorflow.compat.v1 as tf
+
+tf.disable_v2_behavior()
 
 
 class DataTest(tf.test.TestCase):
@@ -134,7 +131,7 @@ class DataTest(tf.test.TestCase):
           is_training=False,
           shuffle_examples=False,
           skip_n_initial_records=0)
-      iterator = dataset.make_initializable_iterator()
+      iterator = tf.data.make_initializable_iterator(dataset)
       next_record = iterator.get_next()
       sess.run([
           tf.initializers.local_variables(),

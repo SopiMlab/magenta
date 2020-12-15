@@ -33,16 +33,16 @@ These functions are necessary for use with the RL Tuner class.
 
 import os
 
-import magenta
 from magenta.common import sequence_example_lib
 from magenta.models.rl_tuner import rl_tuner_ops
 from magenta.models.shared import events_rnn_graph
-from magenta.music import midi_io
-from magenta.music import sequences_lib
 from magenta.pipelines import melody_pipelines
+import note_seq
+from note_seq import midi_io
+from note_seq import sequences_lib
 import numpy as np
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import layers as contrib_layers
+import tf_slim
 
 
 class NoteRNNLoader(object):
@@ -235,9 +235,9 @@ class NoteRNNLoader(object):
             outputs_flat = tf.reshape(outputs,
                                       [-1, self.hparams.rnn_layer_sizes[-1]])
             if self.note_rnn_type == 'basic_rnn':
-              linear_layer = contrib_layers.linear
+              linear_layer = tf_slim.layers.linear
             else:
-              linear_layer = contrib_layers.legacy_linear
+              linear_layer = tf_slim.layers.legacy_linear
             logits_flat = linear_layer(
                 outputs_flat, self.hparams.one_hot_length)
             return logits_flat, final_state
@@ -306,14 +306,11 @@ class NoteRNNLoader(object):
       tf.logging.debug('Priming the model with MIDI file %s', self.midi_primer)
 
       # Convert primer Melody to model inputs.
-      encoder = magenta.music.OneHotEventSequenceEncoderDecoder(
-          magenta.music.MelodyOneHotEncoding(
-              min_note=rl_tuner_ops.MIN_NOTE,
-              max_note=rl_tuner_ops.MAX_NOTE))
+      encoder = note_seq.OneHotEventSequenceEncoderDecoder(
+          note_seq.MelodyOneHotEncoding(
+              min_note=rl_tuner_ops.MIN_NOTE, max_note=rl_tuner_ops.MAX_NOTE))
 
-      seq = encoder.encode(self.primer)
-      features = seq.feature_lists.feature_list['inputs'].feature
-      primer_input = [list(i.float_list.value) for i in features]
+      primer_input, _ = encoder.encode(self.primer)
 
       # Run model over primer sequence.
       primer_input_batch = np.tile([primer_input], (self.batch_size, 1, 1))

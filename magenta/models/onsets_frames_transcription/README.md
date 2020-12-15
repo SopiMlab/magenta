@@ -22,7 +22,7 @@ Note that while we provide commits for code used in papers, we can provide suppo
 
 You may also be interested in a [PyTorch Onsets and Frames](https://github.com/jongwook/onsets-and-frames) implementation by [Jong Wook Kim](https://github.com/jongwook) (not supported by the Magenta team).
 
-Finally, we have also open sourced the [align_fine](/magenta/music/alignment) tool for high performance fine alignment of sequences that are already coarsely aligned, as described in the "Fine Alignment" section of the Appendix in the [MAESTRO paper](https://goo.gl/magenta/maestro-paper).
+Finally, we have also open sourced the [align_fine](https://github.com/magenta/note-seq/blob/master/note_seq/alignment) tool for high performance fine alignment of sequences that are already coarsely aligned, as described in the "Fine Alignment" section of the Appendix in the [MAESTRO paper](https://goo.gl/magenta/maestro-paper).
 
 ## JavaScript App
 
@@ -63,7 +63,14 @@ onsets_frames_transcription_transcribe \
 
 ## Train your own
 
-If you would like to train the model yourself, first set up your [Magenta environment](/README.md).
+If you would like to train the model yourself, first set up the [Magenta development environment](/README.md#development-environment).
+If you're going to run dataset creation yourself (i.e. not using the pre-generated TFRecord files),
+you'll also need Apache Beam so the install command is:
+
+```
+pip install -e .[beam]
+```
+
 
 ### MAESTRO Dataset
 
@@ -127,8 +134,6 @@ To use your own dataset or the [E-GMD dataset](https://g.co/magenta/e-gmd), see 
 Now can train your own transcription model using the training TFRecord file generated during dataset creation.
 
 Note that if you have the `audio_transform` hparam set to true (which it is by default), you will need to have the [sox](http://sox.sourceforge.net/) binary installed on your system.
-
-Note that if you run a training or an eval job on a platform other than an NVIDIA GPU, you will need to add the argument `--hparams=use_cudnn=false` when running that job. This will use a cuDNN-compatible ops that can run on the CPU.
 
 ```bash
 TRAIN_EXAMPLES=<path to training tfrecord(s) generated during dataset creation>

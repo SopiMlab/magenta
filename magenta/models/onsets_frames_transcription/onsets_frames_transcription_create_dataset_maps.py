@@ -25,8 +25,8 @@ import re
 
 from magenta.models.onsets_frames_transcription import audio_label_data_utils
 
-from magenta.music import audio_io
-from magenta.music import midi_io
+from note_seq import audio_io
+from note_seq import midi_io
 
 import six
 import tensorflow.compat.v1 as tf
@@ -123,6 +123,7 @@ def main(unused_argv):
 
 
 def console_entry_point():
+  tf.disable_v2_behavior()
   tf.app.run(main)
 
 

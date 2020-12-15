@@ -23,7 +23,6 @@ from magenta.models.gansynth.lib import data_normalizer
 from magenta.models.gansynth.lib import layers
 from magenta.models.gansynth.lib import networks
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import layers as contrib_layers
 
 
 def _num_filters_fn(block_id, **kwargs):
@@ -44,7 +43,7 @@ def generator_fn_specgram(inputs, **kwargs):
   fake_images, end_points, extras = networks.generator(
       z,
       kwargs['progress'],
-      lambda block_id: _num_filters_fn(block_id, **kwargs),
+      lambda block_id: _num_filters_fn(block_id, **kwargs),  # pylint:disable=unnecessary-lambda
       kwargs['resolution_schedule'],
       num_blocks=kwargs['num_blocks'],
       kernel_size=kwargs['kernel_size'],
@@ -67,13 +66,13 @@ def discriminator_fn_specgram(images, **kwargs):
   logits, end_points = networks.discriminator(
       images,
       kwargs['progress'],
-      lambda block_id: _num_filters_fn(block_id, **kwargs),
+      lambda block_id: _num_filters_fn(block_id, **kwargs),  # pylint:disable=unnecessary-lambda
       kwargs['resolution_schedule'],
       num_blocks=kwargs['num_blocks'],
       kernel_size=kwargs['kernel_size'],
       simple_arch=kwargs['simple_arch'])
   with tf.variable_scope('discriminator_cond'):
-    x = contrib_layers.flatten(end_points['last_conv'])
+    x = tf.layers.flatten(end_points['last_conv'])
     end_points['classification_logits'] = layers.custom_dense(
         x=x, units=kwargs['num_tokens'], scope='classification_logits')
   return logits, end_points

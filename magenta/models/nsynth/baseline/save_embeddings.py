@@ -21,9 +21,7 @@ from magenta.models.nsynth import reader
 from magenta.models.nsynth import utils
 import numpy as np
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import slim as contrib_slim
 
-slim = contrib_slim
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string("master", "",
@@ -143,4 +141,5 @@ def main(unused_argv):
 
 
 if __name__ == "__main__":
+  tf.disable_v2_behavior()
   tf.app.run()

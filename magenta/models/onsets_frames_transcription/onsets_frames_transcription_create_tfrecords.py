@@ -40,9 +40,11 @@ from absl import logging
 import apache_beam as beam
 from apache_beam.metrics import Metrics
 from magenta.models.onsets_frames_transcription import audio_label_data_utils
-from magenta.music import midi_io
-from magenta.music.protobuf import music_pb2
+from note_seq import midi_io
+from note_seq.protobuf import music_pb2
 import tensorflow.compat.v1 as tf
+
+tf.disable_v2_behavior()
 
 FLAGS = flags.FLAGS
 
@@ -137,5 +139,10 @@ def main(argv):
           num_shards=FLAGS.num_shards)
 
 
-if __name__ == '__main__':
+def console_entry_point():
+  tf.disable_v2_behavior()
   app.run(main)
+
+
+if __name__ == '__main__':
+  console_entry_point()

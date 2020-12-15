@@ -19,11 +19,11 @@ import collections
 
 import magenta
 from magenta.common import Nade
+from magenta.contrib import seq2seq as contrib_seq2seq
 from magenta.models.shared import events_rnn_graph
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import metrics as contrib_metrics
-from tensorflow.contrib import seq2seq as contrib_seq2seq
-from tensorflow.contrib import slim as contrib_slim
+import tf_slim  # pylint:disable=g-bad-import-order
+
 
 _RnnNadeStateTuple = collections.namedtuple(
     'RnnNadeStateTuple', ('b_enc', 'b_dec', 'rnn_state'))
@@ -58,7 +58,7 @@ class RnnNade(object):
   [2]: https://arxiv.org/abs/1206.6392
 
   Args:
-    rnn_cell: The tf.contrib.rnn.RnnCell to use.
+    rnn_cell: The tf.nn.rnn_cell.RnnCell to use.
     num_dims: The number of binary dimensions for each observation.
     num_hidden: The number of hidden units in the NADE.
   """
@@ -102,7 +102,7 @@ class RnnNade(object):
     Returns:
       final_state: An RnnNadeStateTuple, the final state of the RNN-NADE.
     """
-    batch_size = inputs.shape[0].value
+    batch_size = int(inputs.shape[0])
 
     if lengths is None:
       lengths = tf.tile(tf.shape(inputs)[1:2], [batch_size])
@@ -150,7 +150,7 @@ class RnnNade(object):
       cond_prob: The conditional probabilities at each non-padded value for
           every batch, sized `[sum(lengths), num_dims]`.
     """
-    assert self._num_dims == sequences.shape[2].value
+    assert self._num_dims == int(sequences.shape[2])
 
     # Remove last value from input sequences.
     inputs = sequences[:, 0:-1, :]
@@ -288,7 +288,7 @@ def get_build_graph_fn(mode, config, sequence_example_file_paths=None):
 
         optimizer = tf.train.AdamOptimizer(learning_rate=hparams.learning_rate)
 
-        train_op = contrib_slim.learning.create_train_op(
+        train_op = tf_slim.learning.create_train_op(
             loss, optimizer, clip_gradient_norm=hparams.clip_norm)
         tf.add_to_collection('train_op', train_op)
 
@@ -300,7 +300,7 @@ def get_build_graph_fn(mode, config, sequence_example_file_paths=None):
             'metrics/recall': recall,
         }
       elif mode == 'eval':
-        vars_to_summarize, update_ops = contrib_metrics.aggregate_metric_map({
+        vars_to_summarize, update_ops = tf_slim.metrics.aggregate_metric_map({
             'loss':
                 tf.metrics.mean(-log_probs),
             'metrics/perplexity':

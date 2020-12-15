@@ -20,12 +20,12 @@ import functools
 
 from magenta.common import beam_search
 from magenta.common import state_util
+from magenta.contrib import training as contrib_training
 from magenta.models.shared import events_rnn_graph
-import magenta.music as mm
+from magenta.models.shared import model
+import note_seq
 import numpy as np
-from six.moves import range  # pylint: disable=redefined-builtin
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import training as contrib_training
 
 # Model state when generating event sequences, consisting of the next inputs to
 # feed the model, the current RNN state, the current control sequence (if
@@ -59,7 +59,7 @@ def _extend_control_events_default(control_events, events, state):
   return state
 
 
-class EventSequenceRnnModel(mm.BaseModel):
+class EventSequenceRnnModel(model.BaseModel):
   """Class for RNN event sequence generation models.
 
   Currently this class only supports generation, of both event sequences and
@@ -82,7 +82,7 @@ class EventSequenceRnnModel(mm.BaseModel):
 
   def _batch_size(self):
     """Extracts the batch size from the graph."""
-    return self._session.graph.get_collection('inputs')[0].shape[0].value
+    return int(self._session.graph.get_collection('inputs')[0].shape[0])
 
   def _generate_step_for_batch(self, event_sequences, inputs, initial_state,
                                temperature):
@@ -312,7 +312,7 @@ class EventSequenceRnnModel(mm.BaseModel):
     """
     if (control_events is not None and
         not isinstance(self._config.encoder_decoder,
-                       mm.ConditionalEventSequenceEncoderDecoder)):
+                       note_seq.ConditionalEventSequenceEncoderDecoder)):
       raise EventSequenceRnnModelError(
           'control sequence provided but encoder/decoder is not a '
           'ConditionalEventSequenceEncoderDecoder')
@@ -445,7 +445,7 @@ class EventSequenceRnnModel(mm.BaseModel):
           'control sequence must be at least as long as the event sequences')
 
     batch_size = self._batch_size()
-    num_full_batches = len(event_sequences) / batch_size
+    num_full_batches = len(event_sequences) // batch_size
 
     loglik = np.empty(len(event_sequences))
 
@@ -462,8 +462,7 @@ class EventSequenceRnnModel(mm.BaseModel):
           [events[:-1] for events in event_sequences], full_length=True)
 
     graph_initial_state = self._session.graph.get_collection('initial_state')
-    initial_state = [
-        self._session.run(graph_initial_state)] * len(event_sequences)
+    initial_state = self._session.run(graph_initial_state)
     offset = 0
     for _ in range(num_full_batches):
       # Evaluate a single step for one batch of event sequences.
@@ -471,7 +470,7 @@ class EventSequenceRnnModel(mm.BaseModel):
       batch_loglik = self._evaluate_batch_log_likelihood(
           [event_sequences[i] for i in batch_indices],
           [inputs[i] for i in batch_indices],
-          initial_state[batch_indices])
+          [initial_state] * len(batch_indices))
       loglik[batch_indices] = batch_loglik
       offset += batch_size
 
@@ -485,7 +484,7 @@ class EventSequenceRnnModel(mm.BaseModel):
           [event_sequences[i] for i in batch_indices] + [
               copy.deepcopy(event_sequences[-1]) for _ in range(pad_size)],
           [inputs[i] for i in batch_indices] + inputs[-1] * pad_size,
-          np.append(initial_state[batch_indices],
+          np.append([initial_state] * len(batch_indices),
                     np.tile(inputs[-1, :], (pad_size, 1)),
                     axis=0))
       loglik[batch_indices] = batch_loglik[0:num_extra]

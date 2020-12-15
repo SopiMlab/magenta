@@ -25,8 +25,8 @@ from magenta.models.onsets_frames_transcription import configs
 from magenta.models.onsets_frames_transcription import data
 from magenta.models.onsets_frames_transcription import infer_util
 from magenta.models.onsets_frames_transcription import train_util
-from magenta.music import midi_io
-from magenta.music.protobuf import music_pb2
+from note_seq import midi_io
+from note_seq.protobuf import music_pb2
 import six
 import tensorflow.compat.v1 as tf
 
@@ -99,7 +99,7 @@ def run(argv, config_map, data_fn):
                                             os.path.expanduser(FLAGS.model_dir),
                                             hparams)
 
-    iterator = dataset.make_initializable_iterator()
+    iterator = tf.data.make_initializable_iterator(dataset)
     next_record = iterator.get_next()
 
     with tf.Session() as sess:
@@ -151,6 +151,7 @@ def main(argv):
 
 
 def console_entry_point():
+  tf.disable_v2_behavior()
   tf.app.run(main)
 
 if __name__ == '__main__':

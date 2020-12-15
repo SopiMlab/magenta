@@ -13,25 +13,26 @@
 # limitations under the License.
 
 """Tests for lead_sheet_pipelines."""
+
+from absl.testing import absltest
 from magenta.common import testing_lib as common_testing_lib
-from magenta.music import chords_lib
-from magenta.music import constants
-from magenta.music import lead_sheets_lib
-from magenta.music import melodies_lib
-from magenta.music import sequences_lib
-from magenta.music import testing_lib as music_testing_lib
-from magenta.music.protobuf import music_pb2
 from magenta.pipelines import chord_pipelines
 from magenta.pipelines import lead_sheet_pipelines
 from magenta.pipelines import melody_pipelines
-import tensorflow.compat.v1 as tf
+from note_seq import chords_lib
+from note_seq import constants
+from note_seq import lead_sheets_lib
+from note_seq import melodies_lib
+from note_seq import sequences_lib
+from note_seq import testing_lib as music_testing_lib
+from note_seq.protobuf import music_pb2
 
 NOTE_OFF = constants.MELODY_NOTE_OFF
 NO_EVENT = constants.MELODY_NO_EVENT
 NO_CHORD = constants.NO_CHORD
 
 
-class LeadSheetPipelinesTest(tf.test.TestCase):
+class LeadSheetPipelinesTest(absltest.TestCase):
 
   def setUp(self):
     self.steps_per_quarter = 4
@@ -50,7 +51,7 @@ class LeadSheetPipelinesTest(tf.test.TestCase):
   def _unit_transform_test(self, unit, input_instance,
                            expected_outputs):
     outputs = unit.transform(input_instance)
-    self.assertTrue(isinstance(outputs, list))
+    self.assertIsInstance(outputs, list)
     common_testing_lib.assert_set_equality(self, expected_outputs, outputs)
     self.assertEqual(unit.input_type, type(input_instance))
     if outputs:
@@ -178,4 +179,4 @@ class LeadSheetPipelinesTest(tf.test.TestCase):
     self.assertEqual(stats_dict['empty_chord_progressions'].count, 1)
 
 if __name__ == '__main__':
-  tf.test.main()
+  absltest.main()

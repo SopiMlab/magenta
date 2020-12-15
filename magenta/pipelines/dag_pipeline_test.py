@@ -14,16 +14,12 @@
 
 """Tests for dag_pipeline."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 
+from absl.testing import absltest
 from magenta.pipelines import dag_pipeline
 from magenta.pipelines import pipeline
 from magenta.pipelines import statistics
-import tensorflow.compat.v1 as tf
 
 Type0 = collections.namedtuple('Type0', ['x', 'y', 'z'])
 Type1 = collections.namedtuple('Type1', ['x', 'y'])
@@ -31,6 +27,8 @@ Type2 = collections.namedtuple('Type2', ['z'])
 Type3 = collections.namedtuple('Type3', ['s', 't'])
 Type4 = collections.namedtuple('Type4', ['s', 't', 'z'])
 Type5 = collections.namedtuple('Type5', ['a', 'b', 'c', 'd', 'z'])
+
+# pylint:disable=missing-class-docstring
 
 
 class UnitA(pipeline.Pipeline):
@@ -86,7 +84,7 @@ class UnitD(pipeline.Pipeline):
     return [t5]
 
 
-class DAGPipelineTest(tf.test.TestCase):
+class DAGPipelineTest(absltest.TestCase):
 
   def testDAGPipelineInputAndOutputType(self):
     # Tests that the DAGPipeline has the correct `input_type` and
@@ -127,7 +125,7 @@ class DAGPipelineTest(tf.test.TestCase):
 
       self.assertEqual(list(output_dict.keys()), ['abcdz'])
       results = output_dict['abcdz']
-      self.assertEqual(len(results), 1)
+      self.assertLen(results, 1)
       result = results[0]
 
       # The following outputs are the result of passing the values in
@@ -167,7 +165,7 @@ class DAGPipelineTest(tf.test.TestCase):
 
     self.assertEqual(list(output_dict.keys()), ['outputs'])
     results = output_dict['outputs']
-    self.assertEqual(len(results), 3)
+    self.assertLen(results, 3)
 
     expected_results = [Type4((x + i) * 1000, (y + i) - 100, 0)
                         for i in range(z)]
@@ -438,7 +436,7 @@ class DAGPipelineTest(tf.test.TestCase):
       self.assertEqual(stats_1, stats_2)
 
       for stat in stats_1:
-        self.assertTrue(isinstance(stat, statistics.Counter))
+        self.assertIsInstance(stat, statistics.Counter)
 
       names = sorted([stat.name for stat in stats_1])
       self.assertEqual(
@@ -881,4 +879,4 @@ class DAGPipelineTest(tf.test.TestCase):
 
 
 if __name__ == '__main__':
-  tf.test.main()
+  absltest.main()

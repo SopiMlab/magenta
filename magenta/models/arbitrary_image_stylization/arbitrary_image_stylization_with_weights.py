@@ -20,11 +20,6 @@ identity transform parameters and the style parameters for the style image) and
 saves them to the given output_dir.
 See run_interpolation_with_identity.sh for example usage.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import ast
 import os
 
@@ -32,9 +27,7 @@ from magenta.models.arbitrary_image_stylization import arbitrary_image_stylizati
 from magenta.models.image_stylization import image_utils
 import numpy as np
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import slim as contrib_slim
-
-slim = contrib_slim
+import tf_slim as slim
 
 flags = tf.flags
 flags.DEFINE_string('checkpoint', None, 'Path to the model checkpoint.')
@@ -181,6 +174,7 @@ def main(unused_argv=None):
 
 
 def console_entry_point():
+  tf.disable_v2_behavior()
   tf.app.run(main)
 
 if __name__ == '__main__':

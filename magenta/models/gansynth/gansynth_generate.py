@@ -64,6 +64,9 @@ absl.flags.DEFINE_list(
   [],
   "The amounts of each edit to apply when generating"
 )
+absl.flags.DEFINE_string('tfds_data_dir',
+                         'gs://tfds-data/datasets',
+                         'Data directory for the TFDS dataset used to train.')
 
 FLAGS = absl.flags.FLAGS
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -73,7 +76,11 @@ def main(unused_argv):
   absl.flags.FLAGS.alsologtostderr = True
 
   # Load the model
-  flags = lib_flags.Flags({'batch_size_schedule': [FLAGS.batch_size]})
+  flags = lib_flags.Flags(
+      {
+          'batch_size_schedule': [FLAGS.batch_size],
+          **({'tfds_data_dir': FLAGS.tfds_data_dir} if FLAGS.tfds_data_dir else {})
+      })
   model = lib_model.Model.load_from_path(FLAGS.ckpt_dir, flags)
 
   # Make an output directory if it doesn't exist
@@ -146,6 +153,7 @@ def main(unused_argv):
 
 
 def console_entry_point():
+  tf.disable_v2_behavior()
   tf.app.run(main)
 
 

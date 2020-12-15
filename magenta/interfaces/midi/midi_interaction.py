@@ -18,9 +18,9 @@ import abc
 import threading
 import time
 
-import magenta
-from magenta.music.protobuf import generator_pb2
-from magenta.music.protobuf import music_pb2
+import note_seq
+from note_seq.protobuf import generator_pb2
+from note_seq.protobuf import music_pb2
 import tensorflow.compat.v1 as tf
 
 
@@ -106,7 +106,6 @@ class MidiInteraction(threading.Thread):
     val = self._midi_hub.control_value(self._tempo_control_number)
     return self._default_qpm if val is None else val + self._BASE_QPM
 
-  @property
   def _temperature(self, min_temp=0.1, max_temp=2.0, default=1.0):
     """Returns the temperature based on the current control value.
 
@@ -331,7 +330,7 @@ class CallAndResponseMidiInteraction(MidiInteraction):
         end_time=response_end_time)
 
     # Get current temperature setting.
-    generator_options.args['temperature'].float_value = self._temperature
+    generator_options.args['temperature'].float_value = self._temperature()
 
     # Generate response.
     tf.logging.info(
@@ -344,8 +343,9 @@ class CallAndResponseMidiInteraction(MidiInteraction):
     tf.logging.debug('Generator Options: %s', generator_options)
     response_sequence = self._sequence_generator.generate(
         adjust_sequence_times(input_sequence, -zero_time), generator_options)
-    response_sequence = magenta.music.trim_note_sequence(
-        response_sequence, response_start_time, response_end_time)
+    response_sequence = note_seq.trim_note_sequence(response_sequence,
+                                                    response_start_time,
+                                                    response_end_time)
     return adjust_sequence_times(response_sequence, zero_time)
 
   def run(self):

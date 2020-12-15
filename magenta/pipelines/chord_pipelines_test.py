@@ -13,20 +13,21 @@
 # limitations under the License.
 
 """Tests for chord_pipelines."""
+
+from absl.testing import absltest
 from magenta.common import testing_lib as common_testing_lib
-from magenta.music import chords_lib
-from magenta.music import constants
-from magenta.music import sequences_lib
-from magenta.music import testing_lib as music_testing_lib
-from magenta.music.protobuf import music_pb2
 from magenta.pipelines import chord_pipelines
 from magenta.pipelines import melody_pipelines
-import tensorflow.compat.v1 as tf
+from note_seq import chords_lib
+from note_seq import constants
+from note_seq import sequences_lib
+from note_seq import testing_lib as music_testing_lib
+from note_seq.protobuf import music_pb2
 
 NO_CHORD = constants.NO_CHORD
 
 
-class ChordPipelinesTest(tf.test.TestCase):
+class ChordPipelinesTest(absltest.TestCase):
 
   def setUp(self):
     self.steps_per_quarter = 1
@@ -45,7 +46,7 @@ class ChordPipelinesTest(tf.test.TestCase):
   def _unit_transform_test(self, unit, input_instance,
                            expected_outputs):
     outputs = unit.transform(input_instance)
-    self.assertTrue(isinstance(outputs, list))
+    self.assertIsInstance(outputs, list)
     common_testing_lib.assert_set_equality(self, expected_outputs, outputs)
     self.assertEqual(unit.input_type, type(input_instance))
     if outputs:
@@ -151,4 +152,4 @@ class ChordPipelinesTest(tf.test.TestCase):
 
 
 if __name__ == '__main__':
-  tf.test.main()
+  absltest.main()

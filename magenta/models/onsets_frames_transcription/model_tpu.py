@@ -18,14 +18,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from magenta.contrib import rnn as contrib_rnn
+from magenta.contrib import training as contrib_training
 from magenta.models.onsets_frames_transcription import constants
 from magenta.models.onsets_frames_transcription import estimator_spec_util
 import tensorflow.compat.v1 as tf
-
-import tensorflow.contrib.slim as slim
-from tensorflow.contrib import layers as contrib_layers
-from tensorflow.contrib import rnn as contrib_rnn
-from tensorflow.contrib import training as contrib_training
+import tf_slim as slim
 
 
 def conv_net(inputs, hparams):
@@ -33,7 +31,7 @@ def conv_net(inputs, hparams):
   with slim.arg_scope(
       [slim.conv2d, slim.fully_connected],
       activation_fn=tf.nn.relu,
-      weights_initializer=contrib_layers.variance_scaling_initializer(
+      weights_initializer=slim.variance_scaling_initializer(
           factor=2.0, mode='FAN_AVG', uniform=True)):
 
     net = inputs
@@ -59,7 +57,7 @@ def conv_net(inputs, hparams):
     # Flatten while preserving batch and time dimensions.
     dims = tf.shape(net)
     net = tf.reshape(
-        net, (dims[0], dims[1], net.shape[2].value * net.shape[3].value),
+        net, (dims[0], dims[1], net.shape[2] * net.shape[3]),
         'flatten_end')
 
     net = slim.fully_connected(net, hparams.fc_size, scope='fc_end')

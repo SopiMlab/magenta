@@ -21,11 +21,9 @@ from __future__ import print_function
 import os
 import random
 
+from magenta.contrib import training as contrib_training
 import numpy as np
-from six.moves import range  # pylint: disable=redefined-builtin
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import rnn as contrib_rnn
-from tensorflow.contrib import training as contrib_training
 
 LSTM_STATE_NAME = 'lstm'
 
@@ -99,7 +97,7 @@ def basic_rnn_hparams():
   """Generates the hparams used to train a basic_rnn.
 
   These are the hparams used in the .mag file found at
-  https://github.com/tensorflow/magenta/tree/master/magenta/models/
+  https://github.com/magenta/magenta/tree/master/magenta/models/
   melody_rnn#pre-trained
 
   Returns:
@@ -305,14 +303,14 @@ def make_rnn_cell(rnn_layer_sizes, state_is_tuple=False):
         and cell matrix as a state instead of a concatenated matrix.
 
   Returns:
-      A tf.contrib.rnn.MultiRNNCell based on the given hyperparameters.
+      A tf.rnn.rnn_cell.MultiRNNCell based on the given hyperparameters.
   """
   cells = []
   for num_units in rnn_layer_sizes:
-    cell = contrib_rnn.LSTMCell(num_units, state_is_tuple=state_is_tuple)
+    cell = tf.nn.rnn_cell.LSTMCell(num_units, state_is_tuple=state_is_tuple)
     cells.append(cell)
 
-  cell = contrib_rnn.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
+  cell = tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
 
   return cell
 

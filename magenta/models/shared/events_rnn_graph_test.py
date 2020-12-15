@@ -16,11 +16,14 @@
 
 import tempfile
 
-import magenta
+from magenta.contrib import training as contrib_training
 from magenta.models.shared import events_rnn_graph
 from magenta.models.shared import events_rnn_model
+import note_seq
+from note_seq import testing_lib
 import tensorflow.compat.v1 as tf
-from tensorflow.contrib import training as contrib_training
+
+tf.disable_v2_behavior()
 
 
 class EventSequenceRNNGraphTest(tf.test.TestCase):
@@ -31,8 +34,8 @@ class EventSequenceRNNGraphTest(tf.test.TestCase):
 
     self.config = events_rnn_model.EventSequenceRnnConfig(
         None,
-        magenta.music.OneHotEventSequenceEncoderDecoder(
-            magenta.music.testing_lib.TrivialOneHotEncoding(12)),
+        note_seq.OneHotEventSequenceEncoderDecoder(
+            testing_lib.TrivialOneHotEncoding(12)),
         contrib_training.HParams(
             batch_size=128,
             rnn_layer_sizes=[128, 128],
@@ -62,32 +65,6 @@ class EventSequenceRNNGraphTest(tf.test.TestCase):
       events_rnn_graph.get_build_graph_fn(
           'train', self.config,
           sequence_example_file_paths=[self._sequence_file.name])()
-
-  def testBuildCudnnGraph(self):
-    self.config.hparams.use_cudnn = True
-    with tf.Graph().as_default():
-      events_rnn_graph.get_build_graph_fn(
-          'train', self.config,
-          sequence_example_file_paths=[self._sequence_file.name])()
-
-  def testBuildCudnnGenerateGraph(self):
-    self.config.hparams.use_cudnn = True
-    with tf.Graph().as_default():
-      events_rnn_graph.get_build_graph_fn('generate', self.config)()
-
-  def testBuildCudnnGraphWithResidualConnections(self):
-    self.config.hparams.use_cudnn = True
-    self.config.hparams.residual_connections = True
-    with tf.Graph().as_default():
-      events_rnn_graph.get_build_graph_fn(
-          'train', self.config,
-          sequence_example_file_paths=[self._sequence_file.name])()
-
-  def testBuildCudnnGenerateGraphWithResidualConnections(self):
-    self.config.hparams.use_cudnn = True
-    self.config.hparams.residual_connections = True
-    with tf.Graph().as_default():
-      events_rnn_graph.get_build_graph_fn('generate', self.config)()
 
 
 if __name__ == '__main__':

@@ -24,8 +24,8 @@ from apache_beam.metrics import Metrics
 from magenta.models.onsets_frames_transcription import audio_label_data_utils
 from magenta.models.onsets_frames_transcription import create_dataset_lib
 from magenta.models.onsets_frames_transcription import data
-from magenta.music import audio_io
-from magenta.music.protobuf import music_pb2
+from note_seq import audio_io
+from note_seq.protobuf import music_pb2
 
 import tensorflow.compat.v1 as tf
 
@@ -254,7 +254,7 @@ def pipeline(config_map, dataset_config_map, preprocess_example_fn,
         # ('example_hash', serialized_example)
         id_exs = (id_exs
                   | 'id_exs_flatten_%s' % dataset.name >> beam.Flatten()
-                  | 'id_exs_distinct_%s' % dataset.name >>  beam.Distinct())
+                  | 'id_exs_distinct_%s' % dataset.name >> beam.Distinct())  # pylint:disable=no-value-for-parameter
 
         # ('source_id, 'example_hash')
         sourceid_to_exids = (

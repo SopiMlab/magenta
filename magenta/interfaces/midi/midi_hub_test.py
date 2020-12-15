@@ -15,15 +15,15 @@
 """Tests for midi_hub."""
 
 import collections
+import queue
 import threading
 import time
 
 from magenta.common import concurrency
 from magenta.interfaces.midi import midi_hub
-from magenta.music import testing_lib
-from magenta.music.protobuf import music_pb2
 import mido
-from six.moves import queue as Queue
+from note_seq import testing_lib
+from note_seq.protobuf import music_pb2
 import tensorflow.compat.v1 as tf
 
 Note = collections.namedtuple('Note', ['pitch', 'velocity', 'start', 'end'])
@@ -33,7 +33,7 @@ class MockMidiPort(mido.ports.BaseIOPort):
 
   def __init__(self):
     super(MockMidiPort, self).__init__()
-    self.message_queue = Queue.Queue()
+    self.message_queue = queue.Queue()
 
   def send(self, msg):
     msg.time = time.time()
@@ -62,7 +62,7 @@ class MidiHubTest(tf.test.TestCase):
 
     # Burn in Sleeper for calibration.
     for _ in range(5):
-      concurrency.Sleeper().sleep(0.05)
+      concurrency.Sleeper().sleep(0.01)
 
   def tearDown(self):
     self.midi_hub.__del__()
@@ -153,7 +153,7 @@ class MidiHubTest(tf.test.TestCase):
 
   def testStartPlayback_NoUpdates(self):
     # Use a time in the past to test handling of past notes.
-    start_time = time.time() - 0.05
+    start_time = time.time() - 0.01
     seq = music_pb2.NoteSequence()
     notes = [Note(12, 100, 0.0, 1.0), Note(11, 55, 0.1, 0.5),
              Note(40, 45, 0.2, 0.6)]
@@ -180,7 +180,7 @@ class MidiHubTest(tf.test.TestCase):
       self.assertEqual(msg.note, note_event[2])
       self.assertAlmostEqual(msg.time, note_event[0], delta=0.01)
 
-    self.assertTrue(not note_events)
+    self.assertFalse(note_events)
 
   def testStartPlayback_NoUpdates_UpdateError(self):
     # Use a time in the past to test handling of past notes.
@@ -234,7 +234,7 @@ class MidiHubTest(tf.test.TestCase):
       self.assertEqual(msg.note, note_event[2])
       self.assertAlmostEqual(msg.time, note_event[0], delta=0.01)
 
-    self.assertTrue(not note_events)
+    self.assertFalse(note_events)
     player.stop()
 
   def testCaptureSequence_StopSignal(self):
@@ -430,7 +430,7 @@ class MidiHubTest(tf.test.TestCase):
         signal=midi_hub.MidiSignal(type='note_off')):
       captured_seqs.append(captured_seq)
 
-    self.assertEqual(4, len(captured_seqs))
+    self.assertLen(captured_seqs, 4)
 
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
@@ -480,12 +480,12 @@ class MidiHubTest(tf.test.TestCase):
       time.sleep(0.1)
       captured_seqs.append(captured_seq)
 
-    self.assertEqual(3, len(captured_seqs))
+    self.assertLen(captured_seqs, 3)
 
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[0].total_time
-    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0, [Note(1, 64, 2, end_time)])
@@ -494,7 +494,7 @@ class MidiHubTest(tf.test.TestCase):
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[1].total_time
-    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0,
@@ -525,12 +525,12 @@ class MidiHubTest(tf.test.TestCase):
       time.sleep(0.5)
       captured_seqs.append(captured_seq)
 
-    self.assertEqual(2, len(captured_seqs))
+    self.assertLen(captured_seqs, 2)
 
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[0].total_time
-    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0, [Note(1, 64, 2, end_time)])
@@ -564,12 +564,12 @@ class MidiHubTest(tf.test.TestCase):
     time.sleep(1.0)
     captor.cancel_callback(name)
 
-    self.assertEqual(3, len(captured_seqs))
+    self.assertLen(captured_seqs, 3)
 
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[0].total_time
-    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0, [Note(1, 64, 2, end_time)])
@@ -578,7 +578,7 @@ class MidiHubTest(tf.test.TestCase):
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[1].total_time
-    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0,
@@ -588,7 +588,7 @@ class MidiHubTest(tf.test.TestCase):
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[2].total_time
-    self.assertAlmostEqual(wall_start_time + 3 * period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + 3 * period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0,
@@ -615,12 +615,12 @@ class MidiHubTest(tf.test.TestCase):
     time.sleep(1.3)
     captor.cancel_callback(name)
 
-    self.assertEqual(2, len(captured_seqs))
+    self.assertLen(captured_seqs, 2)
 
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[0].total_time
-    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0, [Note(1, 64, 2, end_time)])
@@ -629,7 +629,7 @@ class MidiHubTest(tf.test.TestCase):
     expected_seq = music_pb2.NoteSequence()
     expected_seq.tempos.add(qpm=120)
     end_time = captured_seqs[1].total_time
-    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.005)
+    self.assertAlmostEqual(wall_start_time + 2 * period, end_time, delta=0.01)
     expected_seq.total_time = end_time
     testing_lib.add_track_to_sequence(
         expected_seq, 0,
