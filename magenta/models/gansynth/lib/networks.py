@@ -425,10 +425,12 @@ def generator(z,
           lod = _to_rgb(lods[block_id - 1])
         scale = resolution_schedule.scale_factor(block_id)
         lod = resolution_schedule.upscale(lod, scale)
+        end_points['upscaled_rgb_{}'.format(block_id)] = lod
 
         # alpha_i is used to replace lod_select. Note sum(alpha_i) is
         # garanteed to be 1.
         alpha = _generator_alpha(block_id, progress)
+        end_points['alpha_{}'.format(block_id)] = alpha
 
         outputs.append(lod * alpha)
 
