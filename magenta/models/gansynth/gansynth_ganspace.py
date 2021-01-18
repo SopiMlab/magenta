@@ -5,14 +5,13 @@ import sys
 
 from absl import logging
 import absl.flags
+from magenta.models.gansynth.lib import estimators
 from magenta.models.gansynth.lib import flags as lib_flags
 from magenta.models.gansynth.lib import generate_util as gu
 from magenta.models.gansynth.lib import model as lib_model
 from magenta.models.gansynth.lib import util
 import numpy as np
 import tensorflow.compat.v1 as tf
-
-import estimators
 
 absl.flags.DEFINE_string('ckpt_dir',
                          '/tmp/gansynth/acoustic_only',

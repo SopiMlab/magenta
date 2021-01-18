@@ -94,6 +94,7 @@ CONSOLE_SCRIPTS = [
     'magenta.models.improv_rnn.improv_rnn_train',
     'magenta.models.gansynth.gansynth_train',
     'magenta.models.gansynth.gansynth_generate',
+    'magenta.models.gansynth.gansynth_ganspace',
     'magenta.models.melody_rnn.melody_rnn_create_dataset',
     'magenta.models.melody_rnn.melody_rnn_generate',
     'magenta.models.melody_rnn.melody_rnn_train',
