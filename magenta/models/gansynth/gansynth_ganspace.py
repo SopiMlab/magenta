@@ -123,9 +123,11 @@ def main(unused_argv):
   model = None
   if FLAGS.list_layers or FLAGS.random_z_count != None:
     # Load the model
-    flags = lib_flags.Flags({"eval_batch_size": FLAGS.batch_size})
+    flags = lib_flags.Flags({
+      "batch_size_schedule": [FLAGS.batch_size]
+    })
     model = lib_model.Model.load_from_path(FLAGS.ckpt_dir, flags)
-
+    
   if FLAGS.list_layers:
     for name, layer in model.fake_data_endpoints.items():
       internal_name = layer.name
@@ -205,8 +207,8 @@ def main(unused_argv):
       pickle.dump(pca_dict, fp, pickle.HIGHEST_PROTOCOL)
   
 def console_entry_point():
+  tf.disable_v2_behavior()
   tf.app.run(main)
-
 
 if __name__ == '__main__':
   console_entry_point()
