@@ -203,7 +203,7 @@ def main(unused_argv):
   if FLAGS.pca_out_file != None:
     logging.info("saving PCA result to {}".format(FLAGS.pca_out_file))
     with open(FLAGS.pca_out_file, "wb") as fp:
-      pickle.dump(pca_dict, fp, pickle.HIGHEST_PROTOCOL)
+      pickle.dump(pca_dict, fp, pickle.DEFAULT_PROTOCOL)
   
 def console_entry_point():
   tf.disable_v2_behavior()
